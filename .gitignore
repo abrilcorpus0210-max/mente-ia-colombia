@@ -1,46 +1,22 @@
-# =============================================================================
-# .gitignore — Proyecto MENTE-IA Colombia (SIVIGILA 2024)
-# Coloca este archivo en la RAÍZ del proyecto (mismo nivel que README.md)
-# =============================================================================
-
-# === Datos sensibles SIVIGILA — NUNCA subir a GitHub ===
+# Solo el Excel crudo (pesado, innecesario en la nube)
 data/raw/
-data/processed/
 *.xlsx
-*.csv
-*.xls
-*.tsv
 
-# === Secretos y credenciales ===
+# Secretos — esto SÍ se queda bloqueado
 .streamlit/secrets.toml
 .env
 *.key
-*.pem
 
-# === Entorno virtual ===
+# Entorno y caché
 venv/
 .venv/
-env/
-ENV/
-
-# === Caché de Python ===
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-.Python
+.claude/
 
-# === Salidas que pueden contener datos detallados ===
-outputs/reportes/
-outputs/graficas/
-
-# === Notebooks: limpiar checkpoints ===
-.ipynb_checkpoints/
-
-# === Editores y sistema operativo ===
-.vscode/
-.idea/
+# Sistema
 .DS_Store
 Thumbs.db
-desktop.ini
-
+.vscode/
+.ipynb_checkpoints/
+outputs/
