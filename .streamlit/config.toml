@@ -1,0 +1,27 @@
+# =============================================================================
+# config.toml — Configuración de Streamlit
+# Coloca este archivo en:  proyecto_sivigila_2024/.streamlit/config.toml
+# =============================================================================
+
+[client]
+# No mostrar tracebacks con rutas internas (ej. C:\Users\...) a los usuarios.
+# Crítico para no exponer información del sistema ni la estructura del proyecto.
+showErrorDetails = false
+
+[server]
+# No servir archivos estáticos del proyecto directamente por URL.
+enableStaticServing = false
+# Recolección de telemetría desactivada.
+# (en versiones nuevas esta opción vive en [browser])
+
+[browser]
+# No enviar estadísticas de uso a Streamlit.
+gatherUsageStats = false
+
+[theme]
+# Paleta celadon / azul Bondi — sobria para salud pública.
+primaryColor = "#0D7C8F"
+backgroundColor = "#F7FBFA"
+secondaryBackgroundColor = "#E8F4F8"
+textColor = "#2C3E50"
+font = "sans serif"
