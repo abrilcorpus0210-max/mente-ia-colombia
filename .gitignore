@@ -20,3 +20,4 @@ Thumbs.db
 .vscode/
 .ipynb_checkpoints/
 outputs/
+data/processed/*_respaldo.csv
