@@ -1,6 +1,6 @@
 # =============================================================================
 # app.py  –  Dashboard Streamlit
-# MENTE-IA Colombia | Sistema de Vigilancia Epidemiológica en Salud Mental
+# PRISMA | Plataforma de Riesgo e Inteligencia para la Salud Mental
 # Intentos de Suicidio – SIVIGILA 2024
 # =============================================================================
 
@@ -15,9 +15,10 @@ import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.utils import RUTAS, PALETA, COLORES_PRIORIDAD, PESOS_IPI_REF
+from src.utils import clasificar_ipi as clasificar_ipi_local
 
 st.set_page_config(
-    page_title="SIVIGILA 2024 – Intentos de Suicidio",
+    page_title="PRISMA – Salud Mental SIVIGILA 2024",
     page_icon="🧠",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -52,7 +53,7 @@ st.markdown(f"""
 
 
 # ── Carga de datos ─────────────────────────────────────────────────────────
-@st.cache_data(show_spinner="Cargando datos...")
+@st.cache_data(show_spinner="Cargando datos y preparando modelos (puede tardar un momento la primera vez)...")
 def cargar():
     if not os.path.exists(RUTAS["procesado_casos"]):
         from src.limpieza import limpiar_datos, guardar_procesado
@@ -67,6 +68,16 @@ def cargar():
         mun = pipeline_ipi(df, verbose=False)
     else:
         mun = pd.read_csv(RUTAS["procesado_mun"], dtype={"cod_dane_mun": str})
+
+    # Generar artefactos del modelo (gráficas + clusters) automáticamente
+    # si aún no existen, para que el usuario nunca tenga que abrir una
+    # terminal y ejecutar `python -m src.modelo` manualmente.
+    ruta_clusters = os.path.join(RUTAS["reportes"], "municipios_clusters.csv")
+    ruta_fi       = os.path.join(RUTAS["graficas"], "11_feature_importance.png")
+    if not (os.path.exists(ruta_clusters) and os.path.exists(ruta_fi)):
+        from src.modelo import pipeline_modelos
+        pipeline_modelos(mun, verbose=False)
+
     return df, mun
 
 df, mun = cargar()
@@ -88,7 +99,7 @@ def verificar_password():
     st.markdown(
         "<div style='text-align:center; padding-top:40px;'>"
         "<span style='font-size:3rem;'>🧠</span><br>"
-        "<h2 style='color:#0D7C8F;'>MENTE-IA Colombia</h2>"
+        "<h2 style='color:#0D7C8F;'>PRISMA</h2>"
         "<p style='opacity:0.7;'>Acceso restringido · Datos de salud pública</p>"
         "</div>",
         unsafe_allow_html=True
@@ -126,7 +137,7 @@ with st.sidebar:
     <div style="text-align:center; padding:14px 0 8px 0;">
       <span style="font-size:2.8rem; display:block; line-height:1;">🧠</span>
       <span style="font-size:1.45rem; font-weight:800;
-                   color:var(--primary-color); letter-spacing:-0.5px;">MENTE-IA</span><br>
+                   color:var(--primary-color); letter-spacing:-0.5px;">PRISMA</span><br>
       <span style="font-size:0.72rem; opacity:0.55; letter-spacing:2px;
                    text-transform:uppercase;">Colombia</span>
     </div>
@@ -159,6 +170,15 @@ with st.sidebar:
       🗓️ <b>Última actualización:</b> 2024
     </div>
     """, unsafe_allow_html=True)
+    st.divider()
+    st.markdown("""
+    <div style="font-size:0.72rem;opacity:0.65;line-height:1.7;">
+      <b>Autoras:</b><br>
+      Daniela Hollmann Guarín<br>
+      Ornella Gomez Meusburger<br>
+      April Corpus Coba
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # ── Filtros ────────────────────────────────────────────────────────────────
@@ -177,6 +197,24 @@ def filtrar(df_base):
 df_f = filtrar(df)
 
 LAYOUT_BASE = dict(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+
+
+# ── Helper: evitar que las etiquetas de valor se corten ─────────────────────
+# Plotly con textposition="outside" no reserva espacio automáticamente:
+# si la barra más alta llega cerca del borde del gráfico, su etiqueta de
+# número queda cortada a la mitad. Esta función amplía el rango del eje
+# de los valores en un margen proporcional, dejando aire para el texto.
+def headroom_vertical(fig, valores, factor=0.18):
+    """Amplía el eje Y para que las etiquetas 'outside' de barras verticales no se corten."""
+    maximo = max(valores) if len(valores) > 0 else 0
+    fig.update_yaxes(range=[0, maximo * (1 + factor)])
+    return fig
+
+def headroom_horizontal(fig, valores, factor=0.12):
+    """Amplía el eje X para que las etiquetas 'outside' de barras horizontales no se corten."""
+    maximo = max(valores) if len(valores) > 0 else 0
+    fig.update_xaxes(range=[0, maximo * (1 + factor)])
+    return fig
 
 
 # ── Supresión de celdas pequeñas (privacidad epidemiológica) ──────────────────
@@ -203,8 +241,8 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # TAB 1 – INICIO
 # ===========================================================================
 with tab1:
-    st.title("🧠 MENTE-IA Colombia")
-    st.subheader("Sistema de Vigilancia en Salud Mental · SIVIGILA 2024")
+    st.title("🧠 PRISMA")
+    st.subheader("Plataforma de Riesgo e Inteligencia para la Salud Mental · SIVIGILA 2024")
     st.markdown(
         "Plataforma de inteligencia de datos para el análisis de intentos de "
         "suicidio registrados por el Sistema Nacional de Vigilancia en Salud "
@@ -257,6 +295,14 @@ with tab1:
 
         **Nota ética:** Análisis epidemiológico y preventivo. No realiza diagnósticos
         clínicos ni identifica individuos.
+
+        ---
+
+        **Equipo desarrollador:**
+        Daniela Hollmann Guarín · Ornella Gomez Meusburger · April Corpus Coba
+
+        Proyecto desarrollado en el marco del Bootcamp Talento Tech –
+        Inteligencia Artificial.
         """)
 
 
@@ -302,6 +348,7 @@ with tab2:
             marker_color=colores_s
         ))
         fig_s.update_layout(**LAYOUT_BASE, height=320, showlegend=False)
+        headroom_vertical(fig_s, s["Casos"])
         st.plotly_chart(fig_s, use_container_width=True)
 
     # Por grupo de edad — sin color= para evitar KeyError
@@ -322,6 +369,7 @@ with tab2:
             marker_color=colores_g
         ))
         fig_g.update_layout(**LAYOUT_BASE, height=320, showlegend=False)
+        headroom_vertical(fig_g, g["Casos"])
         st.plotly_chart(fig_g, use_container_width=True)
     st.caption("📌 El grupo 12–17 años (naranja) concentra la mayor frecuencia relativa.")
 
@@ -333,10 +381,12 @@ with tab2:
     fig_d = go.Figure(go.Bar(
         x=top_d["Casos"], y=top_d["Departamento"],
         orientation="h",
+        text=top_d["Casos"], textposition="outside",
         marker_color=PALETA["primario"]
     ))
     fig_d.update_layout(**LAYOUT_BASE, height=420,
                          yaxis=dict(autorange="reversed"))
+    headroom_horizontal(fig_d, top_d["Casos"])
     st.plotly_chart(fig_d, use_container_width=True)
 
     col_c, col_d = st.columns(2)
@@ -380,9 +430,11 @@ with tab2:
     fig_gp = go.Figure(go.Bar(
         x=gp_df["Casos"], y=gp_df["Grupo"],
         orientation="h",
+        text=gp_df["Casos"], textposition="outside",
         marker_color=PALETA["acento"]
     ))
     fig_gp.update_layout(**LAYOUT_BASE, height=320)
+    headroom_horizontal(fig_gp, gp_df["Casos"])
     st.plotly_chart(fig_gp, use_container_width=True)
     st.caption("📌 Datos globales — no afectados por filtros de selección.")
 
@@ -477,6 +529,7 @@ with tab3:
             marker_color=colores_dist
         ))
         fig_dist.update_layout(**LAYOUT_BASE, height=340, showlegend=False)
+        headroom_vertical(fig_dist, dist["Municipios"])
         st.plotly_chart(fig_dist, use_container_width=True)
 
     # IPI por departamento
@@ -488,6 +541,8 @@ with tab3:
         x=dep_ipi["IPI"],
         y=dep_ipi["Departamento_ocurrencia"],
         orientation="h",
+        text=dep_ipi["IPI"], textposition="outside",
+        texttemplate="%{text:.1f}",
         marker=dict(
             color=dep_ipi["IPI"],
             colorscale=[[0, PALETA["suave"]], [1, PALETA["peligro"]]],
@@ -496,35 +551,77 @@ with tab3:
     ))
     fig_dep.update_layout(**LAYOUT_BASE, height=500,
                            yaxis=dict(autorange="reversed"))
+    headroom_horizontal(fig_dep, dep_ipi["IPI"])
     st.plotly_chart(fig_dep, use_container_width=True)
 
     # Mapa coroplético
     st.subheader("🗺️ Mapa de prioridad por departamento")
+    st.caption("El mapa colorea cada departamento según su IPI promedio. "
+               "Los 5 departamentos más relevantes del estudio (mayor IPI) "
+               "se resaltan con borde oscuro y se listan a la derecha.")
     geo_col = cargar_geojson_colombia()
     dep_mapa = (mun.groupby("Departamento_ocurrencia")
-                .agg(IPI=("IPI","mean"), total_casos=("total_casos","sum"))
+                .agg(IPI=("IPI","mean"), total_casos=("total_casos","sum"),
+                     municipios=("Municipio_ocurrencia","nunique"))
                 .round(2).reset_index())
     dep_mapa["depto_norm"] = dep_mapa["Departamento_ocurrencia"].apply(_norm_depto)
+    dep_mapa = dep_mapa.sort_values("IPI", ascending=False).reset_index(drop=True)
 
-    if geo_col is not None:
-        fig_mapa = px.choropleth(
-            dep_mapa,
-            geojson=geo_col,
-            locations="depto_norm",
-            featureidkey="properties.DPTO_CNMBR",
-            color="IPI",
-            color_continuous_scale=[[0,"#A8D5BA"],[0.5,"#E07B54"],[1,"#C0392B"]],
-            hover_name="Departamento_ocurrencia",
-            hover_data={"IPI":":.1f","total_casos":True,"depto_norm":False},
-            labels={"IPI":"IPI promedio","total_casos":"Total casos"},
-        )
-        fig_mapa.update_geos(fitbounds="locations", visible=False)
-        fig_mapa.update_layout(margin={"r":0,"t":10,"l":0,"b":0}, height=520,
-                                **LAYOUT_BASE)
-        st.plotly_chart(fig_mapa, use_container_width=True)
-        st.caption("Verde: baja · Naranja: media/alta · Rojo: crítica.")
-    else:
-        st.caption("⚠️ Mapa no disponible (sin conexión). Ver gráfica de barras arriba.")
+    # Los 5 departamentos más relevantes (mayor IPI promedio) se resaltan
+    # visualmente con un borde más grueso y oscuro en el mapa.
+    top5_deptos = set(dep_mapa.head(5)["Departamento_ocurrencia"])
+    dep_mapa["es_top5"] = dep_mapa["Departamento_ocurrencia"].isin(top5_deptos)
+
+    col_mapa, col_top5 = st.columns([2.2, 1])
+
+    with col_mapa:
+        if geo_col is not None:
+            fig_mapa = px.choropleth(
+                dep_mapa,
+                geojson=geo_col,
+                locations="depto_norm",
+                featureidkey="properties.DPTO_CNMBR",
+                color="IPI",
+                color_continuous_scale=[[0,"#A8D5BA"],[0.5,"#E07B54"],[1,"#C0392B"]],
+                hover_name="Departamento_ocurrencia",
+                hover_data={"IPI":":.1f","total_casos":True,"municipios":True,"depto_norm":False},
+                labels={"IPI":"IPI promedio","total_casos":"Total casos","municipios":"Municipios"},
+            )
+            # Borde más grueso y oscuro para los 5 departamentos más relevantes,
+            # de modo que destaquen visualmente sobre el resto del mapa.
+            anchos_borde = [2.5 if top else 0.4 for top in dep_mapa["es_top5"]]
+            colores_borde = ["#1A1A1A" if top else "rgba(255,255,255,0.5)"
+                              for top in dep_mapa["es_top5"]]
+            fig_mapa.update_traces(
+                marker_line_width=anchos_borde,
+                marker_line_color=colores_borde,
+            )
+            fig_mapa.update_geos(fitbounds="locations", visible=False)
+            fig_mapa.update_layout(margin={"r":0,"t":10,"l":0,"b":0}, height=520,
+                                    **LAYOUT_BASE)
+            st.plotly_chart(fig_mapa, use_container_width=True)
+            st.caption("Verde: prioridad baja · Naranja: media/alta · Rojo: crítica. "
+                       "Borde negro grueso = top 5 departamentos del estudio.")
+        else:
+            st.caption("⚠️ Mapa no disponible (sin conexión). Ver gráfica de barras arriba.")
+
+    with col_top5:
+        st.markdown("**🏆 Top 5 departamentos**")
+        st.caption("Mayor IPI promedio")
+        for i, row in dep_mapa.head(5).iterrows():
+            nivel = clasificar_ipi_local(row["IPI"])
+            color_badge = COLORES_PRIORIDAD.get(nivel, PALETA["primario"])
+            st.markdown(
+                f"<div style='border-left:4px solid {color_badge}; "
+                f"padding:6px 10px; margin-bottom:8px; "
+                f"background:var(--secondary-background-color); border-radius:6px;'>"
+                f"<b>{row['Departamento_ocurrencia']}</b><br>"
+                f"<span style='font-size:0.85rem; opacity:0.8;'>"
+                f"IPI: {row['IPI']:.1f} · {int(row['total_casos']):,} casos · "
+                f"{int(row['municipios'])} municipios</span>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
 
     # Municipios emergentes
     st.subheader("⚠️ Municipios con crecimiento acelerado")
@@ -581,6 +678,15 @@ with tab3:
 # ===========================================================================
 with tab4:
     st.header("🤖 Modelos de Inteligencia Artificial")
+    st.markdown(
+        "**¿Qué hace esta sección?** Aquí se entrenan y muestran los resultados de "
+        "tres modelos de Inteligencia Artificial que aprenden patrones a partir de "
+        "los 1.000+ municipios con casos registrados, para clasificar automáticamente "
+        "el **nivel de prioridad** de cada municipio (Baja, Media, Alta o Crítica) y "
+        "para descubrir **perfiles territoriales** sin depender de esa clasificación. "
+        "Estos resultados se generan automáticamente al cargar el dashboard — no es "
+        "necesario ejecutar nada manualmente."
+    )
     st.markdown("Tres modelos sobre la tabla municipal (≥5 casos) para clasificar el nivel de prioridad.")
 
     sub1, sub2, sub3 = st.tabs(["Árbol de Decisión","Random Forest","K-Means"])
@@ -602,7 +708,7 @@ with tab4:
             st.image(img_conf, caption="Matriz de confusión – Árbol de Decisión",
                      use_column_width=True)
         else:
-            st.info("Ejecuta `python -m src.modelo` para generar las gráficas.")
+            st.info("Los resultados del modelo se están preparando. Vuelve a cargar la página en unos segundos.")
 
     with sub2:
         st.subheader("Random Forest")
@@ -622,7 +728,7 @@ with tab4:
             st.image(img_conf_rf, caption="Matriz de confusión – Random Forest",
                      use_column_width=True)
         else:
-            st.info("Ejecuta `python -m src.modelo` para generar las gráficas.")
+            st.info("Los resultados del modelo se están preparando. Vuelve a cargar la página en unos segundos.")
 
     with sub3:
         st.subheader("K-Means – Perfiles Territoriales")
@@ -647,7 +753,7 @@ with tab4:
                 ].mean().round(3))
                 st.dataframe(perfil_km, use_container_width=True)
         else:
-            st.info("Ejecuta `python -m src.modelo` para generar los clusters.")
+            st.info("Los resultados del modelo se están preparando. Vuelve a cargar la página en unos segundos.")
         img_codo = os.path.join(RUTAS["graficas"], "14_kmeans_codo.png")
         if os.path.exists(img_codo):
             st.image(img_codo, caption="Método del codo – Selección de k",

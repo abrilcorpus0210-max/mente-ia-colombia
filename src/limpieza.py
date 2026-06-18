@@ -50,6 +50,23 @@ COLUMNAS_ELIMINAR = [
     "confirmados",  # Siempre 1
 ]
 
+# -----------------------------------------------------------------------------
+# AÑO DE ANÁLISIS Y FILTROS DE CALIDAD
+# El proyecto analiza específicamente el corte 2024 del SIVIGILA. Cualquier
+# registro fuera de ese alcance se excluye explícitamente y se reporta,
+# en vez de dejarlo "flotando" en el dataset y distorsionando los KPIs
+# (por ejemplo, inflando el conteo de departamentos o de semanas).
+# -----------------------------------------------------------------------------
+
+ANIO_ANALISIS = 2024
+
+# Departamentos que no son entidades territoriales colombianas. SIVIGILA
+# permite notificar casos de colombianos atendidos en el exterior; estos
+# no tienen código DANE real ni población asociada, por lo que se excluyen
+# del análisis territorial (no se descartan del conteo total nacional de
+# casos hasta el momento del filtro, pero sí del análisis por municipio).
+DEPARTAMENTOS_NO_TERRITORIALES = ["EXTERIOR"]
+
 
 # -----------------------------------------------------------------------------
 # PIPELINE PRINCIPAL DE LIMPIEZA
@@ -88,7 +105,7 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
     # ------------------------------------------------------------------
     df.columns = df.columns.str.strip()
     if verbose:
-        print("\n[1/9] Nombres de columnas normalizados (espacios eliminados)")
+        print("\n[1/11] Nombres de columnas normalizados (espacios eliminados)")
 
     # ------------------------------------------------------------------
     # PASO 2: Eliminar duplicados
@@ -96,18 +113,50 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
     antes = len(df)
     df = df.drop_duplicates()
     if verbose:
-        print(f"[2/9] Duplicados eliminados: {antes - len(df)}")
+        print(f"[2/11] Duplicados eliminados: {antes - len(df)}")
 
     # ------------------------------------------------------------------
-    # PASO 3: Descartar columnas de alta nulidad o sin variabilidad
+    # PASO 3: Filtrar registros fuera del alcance del análisis
+    # (a) Departamentos no territoriales (ej. "EXTERIOR": casos de
+    #     colombianos notificados desde Brasil, Venezuela, Perú, Ecuador).
+    #     No tienen código DANE real ni población asociada, por lo que
+    #     distorsionan el conteo de departamentos y el cálculo del IPI.
+    # (b) Fechas de notificación (FEC_NOT) fuera del año de análisis
+    #     (2024): corresponden a errores de captura o rezagos de
+    #     notificación de años distintos al que se está analizando.
+    # ------------------------------------------------------------------
+    antes_filtro = len(df)
+
+    mask_no_territorial = df["Departamento_ocurrencia"].isin(DEPARTAMENTOS_NO_TERRITORIALES)
+    n_exterior = int(mask_no_territorial.sum())
+
+    fechas_fec_not = pd.to_datetime(df["FEC_NOT"], errors="coerce", format="%Y-%m-%d")
+    mask_fecha_invalida = fechas_fec_not.dt.year != ANIO_ANALISIS
+    n_fecha_invalida = int(mask_fecha_invalida.sum())
+
+    mask_excluir = mask_no_territorial | mask_fecha_invalida
+    n_excluidos = int(mask_excluir.sum())
+
+    df = df[~mask_excluir].copy()
+
+    if verbose:
+        print(f"[3/11] Filtro de calidad aplicado:")
+        print(f"        - Casos en departamentos no territoriales (EXTERIOR): {n_exterior}")
+        print(f"        - Casos con FEC_NOT fuera de {ANIO_ANALISIS}: {n_fecha_invalida}")
+        print(f"        - Total excluido (sin doble conteo): {n_excluidos} "
+              f"({n_excluidos/antes_filtro*100:.2f}% del dataset)")
+        print(f"        - Filas restantes: {len(df):,}")
+
+    # ------------------------------------------------------------------
+    # PASO 4: Descartar columnas de alta nulidad o sin variabilidad
     # ------------------------------------------------------------------
     cols_a_eliminar = [c for c in COLUMNAS_ELIMINAR if c in df.columns]
     df = df.drop(columns=cols_a_eliminar)
     if verbose:
-        print(f"[3/9] Columnas descartadas: {len(cols_a_eliminar)}")
+        print(f"[4/11] Columnas descartadas: {len(cols_a_eliminar)}")
 
     # ------------------------------------------------------------------
-    # PASO 4: Construir código DANE de 5 dígitos (clave municipal)
+    # PASO 5: Construir código DANE de 5 dígitos (clave municipal)
     # CRÍTICO: COD_MUN_O solo no es único entre departamentos.
     # El código DANE correcto es DPTO (2 dígitos) + MUN (3 dígitos).
     # ------------------------------------------------------------------
@@ -116,11 +165,11 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
         df["COD_MUN_O"].astype(str).str.zfill(3)
     )
     if verbose:
-        print(f"[4/9] Código DANE 5 dígitos construido | "
+        print(f"[5/11] Código DANE 5 dígitos construido | "
               f"Municipios únicos: {df['cod_dane_mun'].nunique()}")
 
     # ------------------------------------------------------------------
-    # PASO 5: Convertir fechas (vienen como texto 'YYYY-MM-DD')
+    # PASO 6: Convertir fechas (vienen como texto 'YYYY-MM-DD')
     # ------------------------------------------------------------------
     columnas_fecha = ["FEC_NOT", "INI_SIN", "FEC_CON", "FEC_HOS", "FECHA_NTO"]
     for col in columnas_fecha:
@@ -129,10 +178,10 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
 
     if verbose:
         nulos_fecha = df["FEC_NOT"].isna().sum()
-        print(f"[5/9] Fechas convertidas | FEC_NOT nulos: {nulos_fecha}")
+        print(f"[6/11] Fechas convertidas | FEC_NOT nulos: {nulos_fecha}")
 
     # ------------------------------------------------------------------
-    # PASO 6: Variables temporales derivadas
+    # PASO 7: Variables temporales derivadas
     # ------------------------------------------------------------------
     _MESES_ES = {1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",
                  7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",
@@ -150,10 +199,10 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
     # Edad en el momento del reporte (calculada desde FECHA_NTO si existe)
     # Usamos directamente EDAD ya que UNI_MED = 1 (años) en toda la base.
     if verbose:
-        print("[6/9] Variables temporales derivadas: mes, trimestre, semestre")
+        print("[7/11] Variables temporales derivadas: mes, trimestre, semestre")
 
     # ------------------------------------------------------------------
-    # PASO 7: Variables demográficas derivadas
+    # PASO 8: Variables demográficas derivadas
     # ------------------------------------------------------------------
     # Grupo de edad estandarizado para salud pública
     df["grupo_edad"] = pd.cut(
@@ -176,25 +225,41 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
     df["es_rural"] = df["AREA"] == 3
 
     if verbose:
-        print("[7/9] Variables demográficas derivadas: grupo_edad, flags menor/rural")
+        print("[8/11] Variables demográficas derivadas: grupo_edad, flags menor/rural")
 
     # ------------------------------------------------------------------
-    # PASO 8: Normalizar nom_grupo (etnia) – quitar espacios excesivos
+    # PASO 9: Normalizar nom_grupo (etnia) – quitar espacios excesivos
     # ------------------------------------------------------------------
     if "nom_grupo" in df.columns:
         df["nom_grupo"] = df["nom_grupo"].str.strip().replace("", "Sin especificar")
         df["nom_grupo"] = df["nom_grupo"].fillna("Sin especificar")
 
     if verbose:
-        print("[8/9] Campo nom_grupo (etnia) normalizado")
+        print("[9/11] Campo nom_grupo (etnia) normalizado")
 
     # ------------------------------------------------------------------
-    # PASO 9: Reporte final
+    # PASO 10: Verificación final de columnas vacías remanentes
+    # Auditoría de seguridad: confirma que ninguna columna quedó 100%
+    # nula después de todos los filtros y transformaciones anteriores.
+    # Si aparece alguna (por ejemplo, al cargar un Excel nuevo distinto
+    # al de referencia), se reporta para que sea revisada.
+    # ------------------------------------------------------------------
+    columnas_vacias_remanentes = [c for c in df.columns if df[c].isna().all()]
+    if verbose:
+        if columnas_vacias_remanentes:
+            print(f"[10/11] ⚠ Columnas 100% vacías detectadas tras la limpieza: "
+                  f"{columnas_vacias_remanentes}")
+        else:
+            print("[10/11] Verificación de columnas vacías: ninguna pendiente ✓")
+
+    # ------------------------------------------------------------------
+    # PASO 11: Reporte final
     # ------------------------------------------------------------------
     filas_finales = len(df)
     if verbose:
-        print(f"[9/9] Dataset limpio listo")
+        print(f"[11/11] Dataset limpio listo")
         print(f"\n  Filas iniciales   : {filas_iniciales:,}")
+        print(f"  Filas excluidas   : {n_excluidos:,} (EXTERIOR + fecha fuera de {ANIO_ANALISIS})")
         print(f"  Filas finales     : {filas_finales:,}")
         print(f"  Columnas finales  : {df.shape[1]}")
         print(f"  Columnas nuevas   : cod_dane_mun, mes, mes_nombre, trimestre, "
