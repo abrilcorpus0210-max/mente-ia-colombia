@@ -574,7 +574,6 @@ with tab3:
     st.caption("El mapa colorea cada departamento según su IPI promedio. "
                "Los 5 departamentos más relevantes del estudio (mayor IPI) "
                "se resaltan con borde oscuro y se listan a la derecha.")
-    geo_col = cargar_geojson_colombia()
     dep_mapa = (mun.groupby("Departamento_ocurrencia")
                 .agg(IPI=("IPI","mean"), IPI_max=("IPI","max"),
                      total_casos=("total_casos","sum"),
@@ -590,38 +589,91 @@ with tab3:
     top5_deptos = set(dep_mapa.head(5)["Departamento_ocurrencia"])
     dep_mapa["es_top5"] = dep_mapa["Departamento_ocurrencia"].isin(top5_deptos)
 
+    # Mapa interactivo de Colombia usando centroides reales de cada departamento.
+    # Se usa scatter_geo en vez de choropleth para evitar depender de un archivo
+    # GeoJSON externo que puede no estar disponible. El tamaño de cada burbuja
+    # representa el IPI del departamento; el color va de verde (baja) a rojo (alta).
+    CENTROIDES_COL = {
+        "AMAZONAS":(-72.0,-1.5),"ANTIOQUIA":(-75.5,6.7),"ARAUCA":(-71.0,6.6),
+        "ATLANTICO":(-74.9,10.7),"BOGOTA":(-74.1,4.7),"BOLIVAR":(-74.8,8.6),
+        "BOYACA":(-72.9,5.5),"CALDAS":(-75.3,5.3),"CAQUETA":(-74.5,0.9),
+        "CASANARE":(-72.0,5.3),"CAUCA":(-76.7,2.5),"CESAR":(-73.6,9.3),
+        "CHOCO":(-76.7,6.2),"CORDOBA":(-75.8,8.3),"CUNDINAMARCA":(-74.4,4.9),
+        "GUAINIA":(-68.5,2.6),"GUAJIRA":(-72.5,11.5),"GUAVIARE":(-72.3,2.1),
+        "HUILA":(-75.5,2.5),"MAGDALENA":(-74.4,10.0),"META":(-73.2,3.5),
+        "NARIÑO":(-77.3,1.0),"NORTE SANTANDER":(-72.9,7.9),"PUTUMAYO":(-76.0,0.4),
+        "QUINDIO":(-75.7,4.5),"RISARALDA":(-76.0,5.1),"SAN ANDRES":(-81.7,12.5),
+        "SANTANDER":(-73.4,6.9),"SUCRE":(-75.4,9.2),"TOLIMA":(-75.2,3.8),
+        "VALLE":(-76.6,3.9),"VAUPES":(-70.5,0.2),"VICHADA":(-69.5,4.4),
+    }
+
+    dep_mapa["lon"] = dep_mapa["Departamento_ocurrencia"].map(
+        lambda d: CENTROIDES_COL.get(d, (None, None))[0])
+    dep_mapa["lat"] = dep_mapa["Departamento_ocurrencia"].map(
+        lambda d: CENTROIDES_COL.get(d, (None, None))[1])
+    dep_mapa_geo = dep_mapa.dropna(subset=["lon","lat"])
+
+    # Color basado en IPI promedio del departamento
+    dep_mapa_geo = dep_mapa_geo.copy()
+    dep_mapa_geo["color_val"] = dep_mapa_geo["IPI"]
+    dep_mapa_geo["borde"] = dep_mapa_geo["es_top5"].map(
+        lambda x: "black" if x else "white")
+    dep_mapa_geo["borde_ancho"] = dep_mapa_geo["es_top5"].map(
+        lambda x: 2.5 if x else 0.5)
+    dep_mapa_geo["texto_hover"] = dep_mapa_geo.apply(
+        lambda r: (f"<b>{r['Departamento_ocurrencia']}</b><br>"
+                   f"IPI promedio: {r['IPI']:.1f}<br>"
+                   f"IPI máximo (mun.): {r['IPI_max']:.1f}<br>"
+                   f"Casos totales: {int(r['total_casos']):,}<br>"
+                   f"Municipios: {int(r['municipios'])}"), axis=1)
+
     col_mapa, col_top5 = st.columns([2.2, 1])
 
     with col_mapa:
-        if geo_col is not None:
-            fig_mapa = px.choropleth(
-                dep_mapa,
-                geojson=geo_col,
-                locations="depto_norm",
-                featureidkey="properties.DPTO_CNMBR",
-                color="IPI",
-                color_continuous_scale=[[0,"#A8D5BA"],[0.5,"#E07B54"],[1,"#C0392B"]],
-                hover_name="Departamento_ocurrencia",
-                hover_data={"IPI":":.1f","total_casos":True,"municipios":True,"depto_norm":False},
-                labels={"IPI":"IPI promedio","total_casos":"Total casos","municipios":"Municipios"},
-            )
-            # Borde más grueso y oscuro para los 5 departamentos más relevantes,
-            # de modo que destaquen visualmente sobre el resto del mapa.
-            anchos_borde = [2.5 if top else 0.4 for top in dep_mapa["es_top5"]]
-            colores_borde = ["#1A1A1A" if top else "rgba(255,255,255,0.5)"
-                              for top in dep_mapa["es_top5"]]
-            fig_mapa.update_traces(
-                marker_line_width=anchos_borde,
-                marker_line_color=colores_borde,
-            )
-            fig_mapa.update_geos(fitbounds="locations", visible=False)
-            fig_mapa.update_layout(margin={"r":0,"t":10,"l":0,"b":0}, height=520,
-                                    **LAYOUT_BASE)
-            st.plotly_chart(fig_mapa, use_container_width=True)
-            st.caption("Verde: prioridad baja · Naranja: media/alta · Rojo: crítica. "
-                       "Borde negro grueso = top 5 departamentos del estudio.")
-        else:
-            st.caption("⚠️ Mapa no disponible (sin conexión). Ver gráfica de barras arriba.")
+        fig_mapa = go.Figure()
+
+        # Capa base: todos los departamentos
+        fig_mapa.add_trace(go.Scattergeo(
+            lon=dep_mapa_geo["lon"],
+            lat=dep_mapa_geo["lat"],
+            text=dep_mapa_geo["texto_hover"],
+            hoverinfo="text",
+            marker=dict(
+                size=dep_mapa_geo["IPI"].clip(lower=10) * 0.9 + 8,
+                color=dep_mapa_geo["IPI"],
+                colorscale=[[0,"#A8D5BA"],[0.4,"#5BA4B0"],
+                            [0.7,"#E07B54"],[1,"#C0392B"]],
+                cmin=0, cmax=65,
+                colorbar=dict(title="IPI prom.", thickness=12, len=0.6),
+                line=dict(color=dep_mapa_geo["borde"].tolist(),
+                          width=dep_mapa_geo["borde_ancho"].tolist()),
+                opacity=0.85,
+            ),
+            showlegend=False,
+            name="",
+        ))
+
+        fig_mapa.update_geos(
+            scope="south america",
+            center=dict(lon=-74, lat=4),
+            projection_scale=4.5,
+            showland=True, landcolor="#F5F5F0",
+            showocean=True, oceancolor="#E8F4F8",
+            showlakes=True, lakecolor="#E8F4F8",
+            showrivers=True, rivercolor="#C8DFF0",
+            showcountries=True, countrycolor="#CCCCCC",
+            showcoastlines=True, coastlinecolor="#AAAAAA",
+            showframe=False,
+        )
+        fig_mapa.update_layout(
+            height=520,
+            margin=dict(r=0, t=10, l=0, b=0),
+            **LAYOUT_BASE,
+        )
+        st.plotly_chart(fig_mapa, use_container_width=True)
+        st.caption("Tamaño y color de burbuja = IPI promedio del departamento. "
+                   "Borde negro grueso = top 5 departamentos del estudio. "
+                   "Verde: prioridad baja · Naranja: media/alta · Rojo: crítica.")
 
     with col_top5:
         st.markdown("**🏆 Top 5 departamentos**")
