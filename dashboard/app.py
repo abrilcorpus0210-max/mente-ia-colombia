@@ -115,10 +115,24 @@ verificar_password()
 
 @st.cache_data(show_spinner=False)
 def cargar_geojson_colombia():
-    import urllib.request, json
-    url = ("https://raw.githubusercontent.com/sep6/colombia-geojson"
-           "/master/colombia.geojson")
+    import json
+    # Primero intentar desde el archivo local (siempre disponible en el repo)
+    rutas_locales = [
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                     "data", "raw", "colombia.geojson"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                     "..", "data", "raw", "colombia.geojson"),
+        "data/raw/colombia.geojson",
+    ]
+    for ruta in rutas_locales:
+        if os.path.exists(ruta):
+            with open(ruta, "r", encoding="utf-8") as f:
+                return json.load(f)
+    # Fallback: intentar desde URL externa si el archivo local no existe
     try:
+        import urllib.request
+        url = ("https://raw.githubusercontent.com/sep6/colombia-geojson"
+               "/master/colombia.geojson")
         with urllib.request.urlopen(url, timeout=12) as r:
             return json.loads(r.read())
     except Exception:
@@ -562,14 +576,17 @@ with tab3:
                "se resaltan con borde oscuro y se listan a la derecha.")
     geo_col = cargar_geojson_colombia()
     dep_mapa = (mun.groupby("Departamento_ocurrencia")
-                .agg(IPI=("IPI","mean"), total_casos=("total_casos","sum"),
+                .agg(IPI=("IPI","mean"), IPI_max=("IPI","max"),
+                     total_casos=("total_casos","sum"),
                      municipios=("Municipio_ocurrencia","nunique"))
                 .round(2).reset_index())
     dep_mapa["depto_norm"] = dep_mapa["Departamento_ocurrencia"].apply(_norm_depto)
-    dep_mapa = dep_mapa.sort_values("IPI", ascending=False).reset_index(drop=True)
+    # Ordenar por el IPI máximo de sus municipios (no el promedio),
+    # para que los departamentos con al menos un municipio crítico
+    # suban al top 5 aunque su promedio general sea moderado.
+    dep_mapa = dep_mapa.sort_values("IPI_max", ascending=False).reset_index(drop=True)
 
-    # Los 5 departamentos más relevantes (mayor IPI promedio) se resaltan
-    # visualmente con un borde más grueso y oscuro en el mapa.
+    # Los 5 departamentos con el municipio de mayor IPI individual
     top5_deptos = set(dep_mapa.head(5)["Departamento_ocurrencia"])
     dep_mapa["es_top5"] = dep_mapa["Departamento_ocurrencia"].isin(top5_deptos)
 
@@ -608,17 +625,24 @@ with tab3:
 
     with col_top5:
         st.markdown("**🏆 Top 5 departamentos**")
-        st.caption("Mayor IPI promedio")
+        st.caption("Por municipio de mayor IPI")
         for i, row in dep_mapa.head(5).iterrows():
-            nivel = clasificar_ipi_local(row["IPI"])
+            nivel = clasificar_ipi_local(row["IPI_max"])
             color_badge = COLORES_PRIORIDAD.get(nivel, PALETA["primario"])
+            # Encontrar el municipio más crítico de este departamento
+            mun_critico = (mun[mun["Departamento_ocurrencia"] ==
+                               row["Departamento_ocurrencia"]]
+                           .sort_values("IPI", ascending=False)
+                           .iloc[0])
             st.markdown(
                 f"<div style='border-left:4px solid {color_badge}; "
                 f"padding:6px 10px; margin-bottom:8px; "
                 f"background:var(--secondary-background-color); border-radius:6px;'>"
                 f"<b>{row['Departamento_ocurrencia']}</b><br>"
-                f"<span style='font-size:0.85rem; opacity:0.8;'>"
-                f"IPI: {row['IPI']:.1f} · {int(row['total_casos']):,} casos · "
+                f"<span style='font-size:0.82rem; opacity:0.9;'>"
+                f"🔴 {mun_critico['Municipio_ocurrencia']} — IPI: {row['IPI_max']:.1f}</span><br>"
+                f"<span style='font-size:0.78rem; opacity:0.65;'>"
+                f"{int(row['total_casos']):,} casos · "
                 f"{int(row['municipios'])} municipios</span>"
                 f"</div>",
                 unsafe_allow_html=True
