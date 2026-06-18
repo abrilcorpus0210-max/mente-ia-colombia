@@ -130,6 +130,7 @@ _RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUTAS = {
     "raw_xlsx":          os.path.join(_RAIZ, "data", "raw",       "suicidios_2024.xlsx"),
     "raw_poblacion":     os.path.join(_RAIZ, "data", "raw",       "poblacion_dane_2024.csv"),
+    "raw_acumulado":     os.path.join(_RAIZ, "data", "raw",       "datos_crudos_acumulados.csv"),
     "procesado_casos":   os.path.join(_RAIZ, "data", "processed", "casos_limpios.csv"),
     "procesado_mun":     os.path.join(_RAIZ, "data", "processed", "municipios_riesgo.csv"),
     "graficas":          os.path.join(_RAIZ, "outputs", "graficas"),

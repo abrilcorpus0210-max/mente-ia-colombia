@@ -228,12 +228,13 @@ def suprimir_celdas(tabla, col_casos):
 
 
 # ── TABS ───────────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🏠 Inicio",
     "📊 Análisis Descriptivo",
     "🗺️ Priorización Territorial",
     "🤖 Modelo Predictivo",
     "💡 Recomendaciones",
+    "📤 Actualizar Datos",
 ])
 
 
@@ -867,3 +868,245 @@ with tab5:
         )
         st.caption(f"El archivo excluye municipios con menos de {UMBRAL_PRIVACIDAD} "
                    "casos por privacidad. No contiene registros individuales.")
+
+
+# ===========================================================================
+# TAB 6 – ACTUALIZAR DATOS
+# Permite subir un nuevo archivo Excel (mismo formato de SIVIGILA) y
+# regenerar todo el dashboard (limpieza, IPI, modelos) automáticamente,
+# sin necesidad de tocar código ni la terminal.
+# ===========================================================================
+with tab6:
+    st.header("📤 Actualizar Datos del Sistema")
+    st.markdown(
+        "Esta sección permite cargar un nuevo archivo de datos (formato SIVIGILA) "
+        "para actualizar todo el dashboard: análisis descriptivo, Índice de "
+        "Prioridad de Intervención y modelos de Inteligencia Artificial. "
+        "El sistema valida automáticamente el archivo antes de aplicar los cambios."
+    )
+
+    with st.expander("📋 Ver formato exacto que debe tener el archivo Excel"):
+        from src.validador import formato_columnas_requeridas
+        st.markdown(formato_columnas_requeridas())
+
+    st.divider()
+    st.subheader("1️⃣ Sube tu archivo")
+    archivo_subido = st.file_uploader(
+        "Selecciona un archivo Excel (.xlsx) con el formato de SIVIGILA",
+        type=["xlsx"],
+        help="El archivo debe tener una hoja llamada 'Hoja1' con las columnas "
+             "obligatorias listadas arriba."
+    )
+
+    if archivo_subido is not None:
+        from src.validador import validar_excel
+
+        with st.spinner("Validando archivo..."):
+            resultado = validar_excel(archivo_subido)
+
+        st.divider()
+        st.subheader("2️⃣ Resultado de la validación")
+
+        col_r1, col_r2 = st.columns(2)
+        with col_r1:
+            st.metric("Filas en el archivo", f"{resultado.resumen.get('filas_totales', 0):,}")
+        with col_r2:
+            st.metric("Columnas detectadas", resultado.resumen.get('columnas_totales', 0))
+
+        if resultado.errores:
+            st.error("❌ El archivo **no cumple** el formato requerido. "
+                      "No se puede continuar hasta corregir lo siguiente:")
+            for err in resultado.errores:
+                st.markdown(f"- {err}")
+            st.info("Corrige el archivo y vuelve a subirlo. Puedes revisar el "
+                     "formato exacto en el panel desplegable de arriba.")
+
+        else:
+            if resultado.advertencias:
+                st.warning("⚠️ El archivo es válido, pero se detectaron los "
+                            "siguientes puntos a tener en cuenta:")
+                for adv in resultado.advertencias:
+                    st.markdown(f"- {adv}")
+            else:
+                st.success("✅ El archivo cumple el formato requerido sin "
+                             "observaciones.")
+
+            st.divider()
+            st.subheader("3️⃣ Vista previa de los datos")
+            st.caption("Primeras 10 filas del archivo (solo columnas clave, "
+                        "para verificar visualmente antes de aplicar los cambios).")
+            cols_preview = [c for c in [
+                "FEC_NOT", "SEMANA", "EDAD", "SEXO", "AREA", "PAC_HOS",
+                "Departamento_ocurrencia", "Municipio_ocurrencia"
+            ] if c in resultado.df.columns]
+            st.dataframe(resultado.df[cols_preview].head(10),
+                          use_container_width=True, hide_index=True)
+
+            st.divider()
+            st.subheader("4️⃣ Aplicar actualización")
+            st.info(
+                "ℹ️ **Este archivo se SUMARÁ a los datos ya existentes**, no los "
+                "reemplaza. Los casos que ya estaban registrados (mismo "
+                "`CONSECUTIVE`) no se duplican. Todas las pestañas se "
+                "recalcularán con el conjunto combinado. Esta operación puede "
+                "tardar uno o dos minutos."
+            )
+            confirmar = st.checkbox("Confirmo que quiero agregar este archivo "
+                                      "a los datos existentes.")
+
+            if st.button("➕ Agregar este archivo a los datos existentes",
+                          disabled=not confirmar, type="primary"):
+                with st.spinner("Procesando: combinando datos, limpieza, cálculo "
+                                  "del IPI y entrenamiento de modelos. No cierres "
+                                  "esta página..."):
+                    try:
+                        from src.limpieza import limpiar_datos, guardar_procesado
+                        from src.ipi import pipeline_ipi
+                        from src.modelo import pipeline_modelos
+                        from src.carga import cargar_datos
+
+                        # ---- Obtener la base existente (crudo acumulado) ----
+                        # Orden de prioridad para encontrar los datos actuales:
+                        #   1. El acumulado crudo de una actualización anterior
+                        #      (data/raw/datos_crudos_acumulados.csv), si existe.
+                        #   2. El archivo ya procesado (casos_limpios.csv), del
+                        #      cual se reconstruyen las columnas crudas que
+                        #      limpiar_datos() necesita (ANO, COD_EVE). Este es
+                        #      el camino normal en Streamlit Cloud, donde el
+                        #      Excel original NO está disponible (se excluye
+                        #      del repositorio por tamaño y privacidad).
+                        #   3. El Excel original, solo si existe en disco
+                        #      (entorno local con la carpeta data/raw completa).
+                        ruta_acumulado = RUTAS["raw_acumulado"]
+                        ruta_procesado = RUTAS["procesado_casos"]
+
+                        if os.path.exists(ruta_acumulado):
+                            df_existente = pd.read_csv(
+                                ruta_acumulado,
+                                dtype={"COD_DPTO_O": str, "COD_MUN_O": str}
+                            )
+                            origen_existente = "acumulado de una actualización previa"
+                        elif os.path.exists(ruta_procesado):
+                            df_existente = pd.read_csv(
+                                ruta_procesado,
+                                dtype={"COD_DPTO_O": str, "COD_MUN_O": str}
+                            )
+                            # Reconstruir columnas crudas constantes que se
+                            # descartan durante la limpieza, pero que
+                            # limpiar_datos() vuelve a necesitar al reprocesar.
+                            if "COD_EVE" not in df_existente.columns:
+                                df_existente["COD_EVE"] = 356
+                            if "ANO" not in df_existente.columns:
+                                from src.limpieza import ANIO_ANALISIS
+                                df_existente["ANO"] = pd.to_datetime(
+                                    df_existente["FEC_NOT"], errors="coerce"
+                                ).dt.year.fillna(ANIO_ANALISIS).astype(int)
+                            origen_existente = "datos procesados actuales del dashboard"
+                        elif os.path.exists(RUTAS["raw_xlsx"]):
+                            df_existente = cargar_datos(verbose=False)
+                            origen_existente = "archivo Excel original"
+                        else:
+                            raise FileNotFoundError(
+                                "No se encontró ninguna base de datos existente "
+                                "(ni acumulado, ni procesado, ni Excel original). "
+                                "No es posible combinar el archivo nuevo."
+                            )
+
+                        df_nuevo_crudo = resultado.df.copy()
+                        antes_existente = len(df_existente)
+                        antes_nuevo = len(df_nuevo_crudo)
+
+                        # ---- Respaldo automático ANTES de modificar nada ----
+                        # Permite restaurar la versión anterior desde el botón
+                        # "Restaurar datos originales" más abajo, sin tener
+                        # que volver a subir el Excel completo de SIVIGILA.
+                        ruta_respaldo_casos = ruta_procesado.replace(
+                            "casos_limpios.csv", "casos_limpios_respaldo.csv")
+                        ruta_respaldo_mun = RUTAS["procesado_mun"].replace(
+                            "municipios_riesgo.csv", "municipios_riesgo_respaldo.csv")
+                        if os.path.exists(ruta_procesado) and not os.path.exists(ruta_respaldo_casos):
+                            # Solo se crea la PRIMERA vez, para conservar
+                            # siempre la versión más antigua conocida como
+                            # punto de restauración (no se sobrescribe en
+                            # actualizaciones sucesivas).
+                            pd.read_csv(ruta_procesado).to_csv(
+                                ruta_respaldo_casos, index=False, encoding="utf-8-sig")
+                        if os.path.exists(RUTAS["procesado_mun"]) and not os.path.exists(ruta_respaldo_mun):
+                            pd.read_csv(RUTAS["procesado_mun"]).to_csv(
+                                ruta_respaldo_mun, index=False, encoding="utf-8-sig")
+
+                        # ---- Combinar y eliminar duplicados por CONSECUTIVE ----
+                        df_combinado = pd.concat(
+                            [df_existente, df_nuevo_crudo],
+                            ignore_index=True
+                        )
+                        n_antes_dedup = len(df_combinado)
+                        df_combinado = df_combinado.drop_duplicates(
+                            subset=["CONSECUTIVE"], keep="first"
+                        )
+                        n_duplicados = n_antes_dedup - len(df_combinado)
+                        n_agregados_reales = len(df_combinado) - antes_existente
+
+                        # Guardar la nueva base cruda acumulada para la
+                        # próxima actualización.
+                        os.makedirs(os.path.dirname(ruta_acumulado), exist_ok=True)
+                        df_combinado.to_csv(ruta_acumulado, index=False,
+                                              encoding="utf-8-sig")
+
+                        # ---- Reprocesar el pipeline completo sobre el combinado ----
+                        df_limpio = limpiar_datos(df=df_combinado, verbose=False)
+                        guardar_procesado(df_limpio)
+
+                        mun_nuevo = pipeline_ipi(df_limpio, verbose=False)
+                        pipeline_modelos(mun_nuevo, verbose=False)
+
+                        st.cache_data.clear()
+                        st.success(
+                            f"✅ Datos combinados correctamente "
+                            f"(base previa: {origen_existente}).\n\n"
+                            f"- Casos que ya existían: {antes_existente:,}\n"
+                            f"- Casos en el archivo subido: {antes_nuevo:,}\n"
+                            f"- Duplicados detectados y omitidos: {n_duplicados:,}\n"
+                            f"- Casos nuevos realmente agregados: {n_agregados_reales:,}\n\n"
+                            f"Recarga la página para ver el dashboard actualizado."
+                        )
+                        st.balloons()
+                    except Exception as e:
+                        st.error(f"Ocurrió un error al procesar el archivo: {e}. "
+                                   "Los datos actuales del dashboard NO se modificaron.")
+
+    else:
+        st.info("Aún no se ha seleccionado ningún archivo. Sube un archivo .xlsx "
+                 "para comenzar el proceso de actualización.")
+
+    # ---- Restaurar a la versión anterior ----
+    # Antes de la PRIMERA actualización realizada en esta instalación, el
+    # sistema guarda automáticamente una copia de seguridad de los datos
+    # tal como estaban. Este botón permite volver a esa versión, por
+    # ejemplo después de probar con un archivo de prueba o si una carga
+    # salió mal.
+    st.divider()
+    st.subheader("↩️ Restaurar datos a la versión original")
+    ruta_resp_casos = RUTAS["procesado_casos"].replace(
+        "casos_limpios.csv", "casos_limpios_respaldo.csv")
+    ruta_resp_mun = RUTAS["procesado_mun"].replace(
+        "municipios_riesgo.csv", "municipios_riesgo_respaldo.csv")
+
+    if os.path.exists(ruta_resp_casos) and os.path.exists(ruta_resp_mun):
+        st.caption("Existe una copia de seguridad de los datos previos a la "
+                    "primera actualización realizada en este dashboard. "
+                    "Puedes restaurarla si una carga no salió como esperabas.")
+        if st.button("↩️ Restaurar datos originales (deshacer actualizaciones)"):
+            import shutil
+            shutil.copy(ruta_resp_casos, RUTAS["procesado_casos"])
+            shutil.copy(ruta_resp_mun, RUTAS["procesado_mun"])
+            ruta_acum_borrar = RUTAS["raw_acumulado"]
+            if os.path.exists(ruta_acum_borrar):
+                os.remove(ruta_acum_borrar)
+            st.cache_data.clear()
+            st.success("✅ Datos restaurados a la versión original. "
+                         "Recarga la página para verlo reflejado.")
+    else:
+        st.caption("Todavía no se ha realizado ninguna actualización de datos "
+                    "en este dashboard, por lo que no hay una versión anterior "
+                    "que restaurar.")

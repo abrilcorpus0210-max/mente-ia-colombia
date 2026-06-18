@@ -155,16 +155,32 @@ def entrenar_random_forest(X_train, X_test, y_train, y_test,
     y_pred = modelo.predict(X_test)
     acc    = accuracy_score(y_test, y_pred)
 
-    # Validación cruzada (5 folds) para una estimación más robusta
-    cv_scores = cross_val_score(modelo, X_train, y_train, cv=5, scoring="accuracy")
+    # Validación cruzada (5 folds) para una estimación más robusta.
+    # Se ajusta el número de folds según el tamaño de la clase más
+    # pequeña en train, para evitar errores cuando hay pocos municipios
+    # o niveles de prioridad con muy pocos casos (ej. tras combinar
+    # datos nuevos con un perfil de riesgo poco común).
+    n_clase_min_train = y_train.value_counts().min() if len(y_train) > 0 else 0
+    cv_folds = min(5, n_clase_min_train) if n_clase_min_train >= 2 else 0
+
+    if cv_folds >= 2:
+        cv_scores = cross_val_score(modelo, X_train, y_train, cv=cv_folds,
+                                     scoring="accuracy")
+    else:
+        # Conjunto demasiado pequeño o desbalanceado para validación
+        # cruzada confiable; se omite y se reporta solo el accuracy de test.
+        cv_scores = None
 
     if verbose:
         print("\n" + "─" * 55)
         print("  RANDOM FOREST")
         print("─" * 55)
         print(f"  Accuracy (test)         : {acc:.4f}  ({acc*100:.1f}%)")
-        print(f"  Accuracy CV (media)     : {cv_scores.mean():.4f}  ({cv_scores.mean()*100:.1f}%)")
-        print(f"  Accuracy CV (std)       : ± {cv_scores.std():.4f}")
+        if cv_scores is not None:
+            print(f"  Accuracy CV (media)     : {cv_scores.mean():.4f}  ({cv_scores.mean()*100:.1f}%)")
+            print(f"  Accuracy CV (std)       : ± {cv_scores.std():.4f}")
+        else:
+            print(f"  Accuracy CV             : no disponible (muestra insuficiente)")
         print("\n  Reporte de clasificación:")
         print(classification_report(
             y_test, y_pred,
@@ -363,15 +379,60 @@ def pipeline_modelos(mun: pd.DataFrame = None, verbose: bool = True) -> dict:
     # Preparar datos para clasificación supervisada
     X, y, df_modelo = preparar_datos(mun)
 
-    # División 80/20 — stratify solo si cada clase tiene >= 2 miembros
+    # ------------------------------------------------------------------
+    # Protección robusta para datasets muy pequeños o con clases raras.
+    # Esto puede pasar después de combinar datos nuevos (ej. al subir un
+    # archivo de actualización) que agreguen un municipio con un nivel
+    # de prioridad que antes no existía o que tenga muy pocos casos.
+    #
+    # sklearn puede fallar con "the resulting train set will be empty"
+    # si test_size=0.20 produce 0 muestras de entrenamiento o de prueba
+    # para alguna clase, incluso sin usar stratify. Para evitarlo:
+    #   1. Si el total de municipios es muy pequeño, se reduce test_size
+    #      dinámicamente para garantizar al menos 1 muestra en cada lado.
+    #   2. Si aun así no es posible dividir de forma segura (por ejemplo,
+    #      menos de 5 municipios en total), se usa todo el conjunto como
+    #      train y test (evaluación no es representativa, pero el modelo
+    #      no se rompe).
+    # ------------------------------------------------------------------
     clase_min = y.value_counts().min()
     usar_stratify = y if clase_min >= 2 else None
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
-        test_size=0.20,
-        random_state=42,
-        stratify=usar_stratify
-    )
+
+    n_total = len(X)
+    test_size = 0.20
+    # Garantizar al menos 1 muestra en test y suficientes en train.
+    n_test_estimado = max(1, round(n_total * test_size))
+    n_train_estimado = n_total - n_test_estimado
+
+    if n_total < 5 or n_train_estimado < 1 or n_test_estimado < 1:
+        # Conjunto demasiado pequeño para dividir de forma segura.
+        if verbose:
+            print(f"\n  ⚠ Conjunto de municipios muy pequeño ({n_total}). "
+                  f"Se usará el conjunto completo para train y test "
+                  f"(la evaluación no será representativa).")
+        X_train, X_test, y_train, y_test = X, X, y, y
+    else:
+        try:
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y,
+                test_size=test_size,
+                random_state=42,
+                stratify=usar_stratify
+            )
+        except ValueError:
+            # Última red de seguridad: si train_test_split falla por
+            # cualquier otra combinación de clases raras, se reintenta
+            # sin estratificar y sin riesgo de quedar vacío.
+            if verbose:
+                print("\n  ⚠ train_test_split falló con la configuración "
+                      "estratificada. Reintentando sin estratificar.")
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y,
+                test_size=test_size,
+                random_state=42,
+                stratify=None
+            )
+
     if verbose:
         print(f"\n  Train: {len(X_train)} municipios | Test: {len(X_test)} municipios")
 
