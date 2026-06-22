@@ -35,6 +35,11 @@
 #   7. Se agregan TIP_CAS y Estado_final_de_caso a COLUMNAS_ELIMINAR: ambas
 #      son constantes en el 100% de las filas (sin variabilidad analítica),
 #      igual que CON_FIN y nom_est_f_caso que ya estaban en la lista.
+#   8. NUEVO: Normalización de nombres de departamentos para unificar
+#      variantes ("BOGOTA D.C.", "BOGOTA", "BOGOTÁ" → "BOGOTÁ D.C.") y
+#      eliminar duplicados que inflaban el conteo a 33 departamentos.
+#   9. NUEVO: Asignación explícita del código DANE 11001 para todos los
+#      registros de Bogotá D.C., independientemente de cómo venga COD_MUN_O.
 # =============================================================================
 
 import pandas as pd
@@ -125,6 +130,47 @@ UMBRAL_DIFERENCIA_EDAD_ANIOS = 2
 
 
 # -----------------------------------------------------------------------------
+# NORMALIZACIÓN DE DEPARTAMENTOS
+# Unifica variantes del mismo departamento que SIVIGILA usa indistintamente.
+# Esto resuelve el problema de que aparecían 33 departamentos en lugar de 32.
+# -----------------------------------------------------------------------------
+
+def normalizar_departamentos(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Unifica nombres de departamentos para eliminar duplicados.
+    
+    SIVIGILA usa variantes como "BOGOTA D.C.", "BOGOTA", "BOGOTÁ" para el mismo
+    departamento. Esta función las unifica a un nombre canónico.
+    
+    También unifica "NORTE DE SANTANDER" → "NORTE SANTANDER" y variantes de
+    San Andrés.
+    """
+    df = df.copy()
+    
+    # Limpiar espacios y convertir a mayúsculas (por si acaso)
+    df["Departamento_ocurrencia"] = df["Departamento_ocurrencia"].str.upper().str.strip()
+    
+    # Mapeo de variantes → nombre canónico
+    mapeo = {
+        "BOGOTA D.C.": "BOGOTÁ D.C.",
+        "BOGOTA": "BOGOTÁ D.C.",
+        "BOGOTÁ": "BOGOTÁ D.C.",
+        "BOGOTÁ D.C": "BOGOTÁ D.C.",
+        "BOGOTA DC": "BOGOTÁ D.C.",
+        "BOGOTÁ DC": "BOGOTÁ D.C.",
+        "NORTE DE SANTANDER": "NORTE SANTANDER",
+        "NORTE SANTANDER": "NORTE SANTANDER",  # ya está bien
+        "SAN ANDRES": "SAN ANDRÉS",
+        "SAN ANDRES Y PROVIDENCIA": "SAN ANDRÉS",
+        "SAN ANDRÉS": "SAN ANDRÉS",  # ya está bien
+    }
+    
+    df["Departamento_ocurrencia"] = df["Departamento_ocurrencia"].replace(mapeo)
+    
+    return df
+
+
+# -----------------------------------------------------------------------------
 # PIPELINE PRINCIPAL DE LIMPIEZA
 # -----------------------------------------------------------------------------
 
@@ -159,7 +205,7 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
     # ------------------------------------------------------------------
     df.columns = df.columns.str.strip()
     if verbose:
-        print("\n[1/13] Nombres de columnas normalizados (espacios eliminados)")
+        print("\n[1/14] Nombres de columnas normalizados (espacios eliminados)")
 
     # ------------------------------------------------------------------
     # PASO 2: Limpieza de espacios en blanco en TODAS las columnas de texto
@@ -173,19 +219,29 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
     for col in columnas_texto:
         df[col] = df[col].str.strip()
     if verbose:
-        print(f"[2/13] Espacios en blanco eliminados en {len(columnas_texto)} "
+        print(f"[2/14] Espacios en blanco eliminados en {len(columnas_texto)} "
               f"columnas de texto")
 
     # ------------------------------------------------------------------
-    # PASO 3: Eliminar duplicados
+    # PASO 3: Normalizar departamentos (unificar variantes)
+    # Esto resuelve el problema de los 33 departamentos en lugar de 32.
+    # ------------------------------------------------------------------
+    df = normalizar_departamentos(df)
+    deptos_unicos = df["Departamento_ocurrencia"].nunique()
+    if verbose:
+        print(f"[3/14] Departamentos normalizados | "
+              f"Departamentos únicos: {deptos_unicos}")
+
+    # ------------------------------------------------------------------
+    # PASO 4: Eliminar duplicados
     # ------------------------------------------------------------------
     antes = len(df)
     df = df.drop_duplicates()
     if verbose:
-        print(f"[3/13] Duplicados eliminados: {antes - len(df)}")
+        print(f"[4/14] Duplicados eliminados: {antes - len(df)}")
 
     # ------------------------------------------------------------------
-    # PASO 4: Filtrar registros fuera del alcance del análisis
+    # PASO 5: Filtrar registros fuera del alcance del análisis
     # (a) Departamentos no territoriales (ej. "EXTERIOR").
     # (b) Año epidemiológico (columna ANO) distinto al año de análisis.
     #     Se usa ANO en vez del año calendario de FEC_NOT: ver nota en la
@@ -205,7 +261,7 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
     df = df[~mask_excluir].copy()
 
     if verbose:
-        print(f"[4/13] Filtro de calidad aplicado:")
+        print(f"[5/14] Filtro de calidad aplicado:")
         print(f"        - Casos en departamentos no territoriales (EXTERIOR): {n_exterior}")
         print(f"        - Casos con ANO fuera de {ANIO_ANALISIS}: {n_anio_invalido}")
         print(f"        - Total excluido (sin doble conteo): {n_excluidos} "
@@ -213,28 +269,41 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
         print(f"        - Filas restantes: {len(df):,}")
 
     # ------------------------------------------------------------------
-    # PASO 5: Descartar columnas de alta nulidad o sin variabilidad
+    # PASO 6: Descartar columnas de alta nulidad o sin variabilidad
     # ------------------------------------------------------------------
     cols_a_eliminar = [c for c in COLUMNAS_ELIMINAR if c in df.columns]
     df = df.drop(columns=cols_a_eliminar)
     if verbose:
-        print(f"[5/13] Columnas descartadas: {len(cols_a_eliminar)}")
+        print(f"[6/14] Columnas descartadas: {len(cols_a_eliminar)}")
 
     # ------------------------------------------------------------------
-    # PASO 6: Construir código DANE de 5 dígitos (clave municipal)
+    # PASO 7: Construir código DANE de 5 dígitos (clave municipal)
     # CRÍTICO: COD_MUN_O solo no es único entre departamentos.
     # El código DANE correcto es DPTO (2 dígitos) + MUN (3 dígitos).
+    #
+    # IMPORTANTE: Bogotá D.C. tiene código DANE 11001. Algunos registros
+    # pueden tener COD_MUN_O = "001" o "000" o valores inconsistentes.
+    # Se asigna explícitamente el código correcto para todos los registros
+    # de Bogotá D.C.
     # ------------------------------------------------------------------
     df["cod_dane_mun"] = (
         df["COD_DPTO_O"].astype(str).str.zfill(2) +
         df["COD_MUN_O"].astype(str).str.zfill(3)
     )
+    
+    # Asignación explícita del código DANE 11001 para Bogotá D.C.
+    # Esto asegura que todos los registros de Bogotá tengan el mismo código,
+    # independientemente de cómo venga COD_MUN_O en el archivo original.
+    mask_bogota = df["Departamento_ocurrencia"] == "BOGOTÁ D.C."
+    df.loc[mask_bogota, "cod_dane_mun"] = "11001"
+    
     if verbose:
-        print(f"[6/13] Código DANE 5 dígitos construido | "
+        print(f"[7/14] Código DANE 5 dígitos construido | "
               f"Municipios únicos: {df['cod_dane_mun'].nunique()}")
+        print(f"        - Registros de Bogotá D.C. con código 11001: {int(mask_bogota.sum()):,}")
 
     # ------------------------------------------------------------------
-    # PASO 7: Convertir fechas (vienen como texto 'YYYY-MM-DD')
+    # PASO 8: Convertir fechas (vienen como texto 'YYYY-MM-DD')
     # ------------------------------------------------------------------
     columnas_fecha = ["FEC_NOT", "INI_SIN", "FEC_CON", "FEC_HOS", "FECHA_NTO"]
     for col in columnas_fecha:
@@ -243,10 +312,10 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
 
     if verbose:
         nulos_fecha = df["FEC_NOT"].isna().sum()
-        print(f"[7/13] Fechas convertidas | FEC_NOT nulos: {nulos_fecha}")
+        print(f"[8/14] Fechas convertidas | FEC_NOT nulos: {nulos_fecha}")
 
     # ------------------------------------------------------------------
-    # PASO 8: Validar consistencia de INI_SIN (inicio de síntomas) vs FEC_NOT
+    # PASO 9: Validar consistencia de INI_SIN (inicio de síntomas) vs FEC_NOT
     # Se detectó un patrón sistemático de años mal tecleados (ej. INI_SIN en
     # 2004 para un caso notificado en 2024 con el mismo día/mes). Un valor
     # de INI_SIN posterior a FEC_NOT, o más de UMBRAL_DIAS_INI_SIN días
@@ -266,11 +335,11 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
         df["ini_sin_corregido"] = False
 
     if verbose:
-        print(f"[8/13] INI_SIN validado contra FEC_NOT | "
+        print(f"[9/14] INI_SIN validado contra FEC_NOT | "
               f"Valores implausibles anulados: {n_ini_sin_invalido}")
 
     # ------------------------------------------------------------------
-    # PASO 9: Variables temporales derivadas
+    # PASO 10: Variables temporales derivadas
     # ------------------------------------------------------------------
     _MESES_ES = {1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",
                  7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",
@@ -288,10 +357,10 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
     # Edad en el momento del reporte (calculada desde FECHA_NTO si existe)
     # Usamos directamente EDAD ya que UNI_MED = 1 (años) en toda la base.
     if verbose:
-        print("[9/13] Variables temporales derivadas: mes, trimestre, semestre")
+        print("[10/14] Variables temporales derivadas: mes, trimestre, semestre")
 
     # ------------------------------------------------------------------
-    # PASO 10: Variables demográficas derivadas
+    # PASO 11: Variables demográficas derivadas
     # ------------------------------------------------------------------
     # Grupo de edad estandarizado para salud pública
     df["grupo_edad"] = pd.cut(
@@ -330,12 +399,12 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
     n_edad_inconsistente = int(df["flag_edad_inconsistente"].sum())
 
     if verbose:
-        print("[10/13] Variables demográficas derivadas: grupo_edad, flags "
+        print("[11/14] Variables demográficas derivadas: grupo_edad, flags "
               "menor/rural/edad_inconsistente "
               f"({n_edad_inconsistente} registros marcados)")
 
     # ------------------------------------------------------------------
-    # PASO 11: Normalizar campos de texto con relleno de ancho fijo
+    # PASO 12: Normalizar campos de texto con relleno de ancho fijo
     # nom_grupo, estrato y sem_ges venían con relleno de espacios hasta una
     # longitud fija (ya recortado en el Paso 2). Aquí se completa el
     # tratamiento específico de cada campo: nom_grupo se deja como texto
@@ -357,11 +426,11 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
         ).astype("Int64")
 
     if verbose:
-        print("[11/13] Campos nom_grupo, estrato y sem_ges normalizados "
+        print("[12/14] Campos nom_grupo, estrato y sem_ges normalizados "
               "(texto → categoría/numérico explícito)")
 
     # ------------------------------------------------------------------
-    # PASO 12: Verificación final de columnas vacías remanentes
+    # PASO 13: Verificación final de columnas vacías remanentes
     # Auditoría de seguridad: confirma que ninguna columna quedó 100%
     # nula después de todos los filtros y transformaciones anteriores.
     # Si aparece alguna (por ejemplo, al cargar un Excel nuevo distinto
@@ -370,22 +439,24 @@ def limpiar_datos(df: pd.DataFrame = None, verbose: bool = True) -> pd.DataFrame
     columnas_vacias_remanentes = [c for c in df.columns if df[c].isna().all()]
     if verbose:
         if columnas_vacias_remanentes:
-            print(f"[12/13] ⚠ Columnas 100% vacías detectadas tras la limpieza: "
+            print(f"[13/14] ⚠ Columnas 100% vacías detectadas tras la limpieza: "
                   f"{columnas_vacias_remanentes}")
         else:
-            print("[12/13] Verificación de columnas vacías: ninguna pendiente ✓")
+            print("[13/14] Verificación de columnas vacías: ninguna pendiente ✓")
 
     # ------------------------------------------------------------------
-    # PASO 13: Reporte final
+    # PASO 14: Reporte final
     # ------------------------------------------------------------------
     filas_finales = len(df)
     if verbose:
-        print(f"[13/13] Dataset limpio listo")
+        print(f"[14/14] Dataset limpio listo")
         print(f"\n  Filas iniciales          : {filas_iniciales:,}")
         print(f"  Filas excluidas          : {n_excluidos:,} "
               f"(EXTERIOR + ANO fuera de {ANIO_ANALISIS})")
         print(f"  Filas finales            : {filas_finales:,}")
         print(f"  Columnas finales         : {df.shape[1]}")
+        print(f"  Departamentos únicos     : {df['Departamento_ocurrencia'].nunique()}")
+        print(f"  Municipios únicos        : {df['cod_dane_mun'].nunique()}")
         print(f"  INI_SIN corregidos       : {n_ini_sin_invalido:,}")
         print(f"  EDAD marcada inconsistente: {n_edad_inconsistente:,}")
         print(f"  Columnas nuevas          : cod_dane_mun, mes, mes_nombre, "
