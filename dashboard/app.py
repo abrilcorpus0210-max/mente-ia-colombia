@@ -243,7 +243,7 @@ def suprimir_celdas(tabla, col_casos):
 
 # ── TABS ───────────────────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "🏠 Inicio",
+    " Inicio",
     "📊 Análisis Descriptivo",
     "🗺️ Priorización Territorial",
     "🤖 Modelo Predictivo",
