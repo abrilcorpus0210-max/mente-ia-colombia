@@ -386,7 +386,17 @@ with tab2:
         fig_g.update_layout(**LAYOUT_BASE, height=320, showlegend=False)
         headroom_vertical(fig_g, g["Casos"])
         st.plotly_chart(fig_g, use_container_width=True)
-    st.caption("📌 El grupo 12–17 años (naranja) concentra la mayor frecuencia relativa.")
+ 
+if len(g) > 0:
+    grupo_mayor = g.loc[g["Casos"].idxmax(), "Grupo"]
+    if grupo_mayor == "12–17":
+        st.caption("📌 El grupo 12–17 años (naranja) concentra la mayor frecuencia relativa.")
+    else:
+        st.caption(
+            f"📌 El grupo **{grupo_mayor}** concentra la mayor frecuencia absoluta. "
+            f"El grupo 12–17 años (naranja) es prioritario por su alta **vulnerabilidad** "
+            f"relativa al tamaño de esa población."
+        )
 
     # Top 15 departamentos
     st.subheader("Top 15 departamentos con más casos")
