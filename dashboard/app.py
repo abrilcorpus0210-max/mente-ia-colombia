@@ -773,53 +773,85 @@ with tab4:
     )
     st.markdown("Tres modelos sobre la tabla municipal (≥5 casos) para clasificar el nivel de prioridad.")
 
-    sub1, sub2, sub3 = st.tabs(["Árbol de Decisión","Random Forest","K-Means"])
+        sub1, sub2, sub3 = st.tabs(["Árbol de Decisión", "Random Forest", "K-Means"])
 
-   with sub1:
+    with sub1:
         st.subheader("Árbol de Decisión")
+
         st.markdown("""
         **Parámetros:** `max_depth=5`, `class_weight='balanced'`, `criterion='gini'`
 
         Genera reglas legibles directamente interpretables por equipos de salud pública.
-```
+
+        ```
         Si tasa_x100k > umbral_A
           y pct_adolescentes > umbral_B
           → Prioridad: Alta
-```
+        ```
         """)
+
         img_arbol = os.path.join(RUTAS["graficas"], "15_arbol_visual.png")
+
         if os.path.exists(img_arbol):
-            st.image(img_arbol, caption="Diagrama completo del árbol entrenado",
-                     use_column_width=True)
+            st.image(
+                img_arbol,
+                caption="Diagrama completo del árbol entrenado",
+                use_column_width=True
+            )
         else:
-            st.info("El diagrama del árbol se está preparando. Vuelve a cargar la página en unos segundos.")
+            st.info(
+                "El diagrama del árbol se está preparando. "
+                "Vuelve a cargar la página en unos segundos."
+            )
+
         img_conf = os.path.join(RUTAS["graficas"], "13_confusion_dt.png")
+
         if os.path.exists(img_conf):
-            st.image(img_conf, caption="Matriz de confusión – Árbol de Decisión",
-                     use_column_width=True)
+            st.image(
+                img_conf,
+                caption="Matriz de confusión – Árbol de Decisión",
+                use_column_width=True
+            )
         else:
-            st.info("Los resultados del modelo se están preparando. Vuelve a cargar la página en unos segundos.")
+            st.info(
+                "Los resultados del modelo se están preparando. "
+                "Vuelve a cargar la página en unos segundos."
+            )
 
     with sub2:
         st.subheader("Random Forest")
+
         st.markdown("""
         **Parámetros:** `n_estimators=100`, `max_depth=8`, `class_weight='balanced'`
 
         Combina 100 árboles. La predicción final es por votación mayoritaria.
+
         - **Accuracy test:** 95.2%
         - **Accuracy CV (5-fold):** 96.2% ± 1.3%
         """)
-        img_fi = os.path.join(RUTAS["graficas"], "11_feature_importance.png")
-        if os.path.exists(img_fi):
-            st.image(img_fi, caption="Feature Importance – Random Forest",
-                     use_column_width=True)
-        img_conf_rf = os.path.join(RUTAS["graficas"], "12_confusion_rf.png")
-        if os.path.exists(img_conf_rf):
-            st.image(img_conf_rf, caption="Matriz de confusión – Random Forest",
-                     use_column_width=True)
-        else:
-            st.info("Los resultados del modelo se están preparando. Vuelve a cargar la página en unos segundos.")
 
+        img_fi = os.path.join(RUTAS["graficas"], "11_feature_importance.png")
+
+        if os.path.exists(img_fi):
+            st.image(
+                img_fi,
+                caption="Feature Importance – Random Forest",
+                use_column_width=True
+            )
+
+        img_conf_rf = os.path.join(RUTAS["graficas"], "12_confusion_rf.png")
+
+        if os.path.exists(img_conf_rf):
+            st.image(
+                img_conf_rf,
+                caption="Matriz de confusión – Random Forest",
+                use_column_width=True
+            )
+        else:
+            st.info(
+                "Los resultados del modelo se están preparando. "
+                "Vuelve a cargar la página en unos segundos."
+            )
     with sub3:
         st.subheader("K-Means – Perfiles Territoriales")
         st.markdown("K-Means agrupa municipios en **4 clusters** por perfil epidemiológico.")
