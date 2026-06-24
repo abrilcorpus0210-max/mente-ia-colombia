@@ -775,18 +775,24 @@ with tab4:
 
     sub1, sub2, sub3 = st.tabs(["Árbol de Decisión","Random Forest","K-Means"])
 
-    with sub1:
+   with sub1:
         st.subheader("Árbol de Decisión")
         st.markdown("""
         **Parámetros:** `max_depth=5`, `class_weight='balanced'`, `criterion='gini'`
 
         Genera reglas legibles directamente interpretables por equipos de salud pública.
-        ```
+```
         Si tasa_x100k > umbral_A
           y pct_adolescentes > umbral_B
           → Prioridad: Alta
-        ```
+```
         """)
+        img_arbol = os.path.join(RUTAS["graficas"], "15_arbol_visual.png")
+        if os.path.exists(img_arbol):
+            st.image(img_arbol, caption="Diagrama completo del árbol entrenado",
+                     use_column_width=True)
+        else:
+            st.info("El diagrama del árbol se está preparando. Vuelve a cargar la página en unos segundos.")
         img_conf = os.path.join(RUTAS["graficas"], "13_confusion_dt.png")
         if os.path.exists(img_conf):
             st.image(img_conf, caption="Matriz de confusión – Árbol de Decisión",
