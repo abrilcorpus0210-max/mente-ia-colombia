@@ -138,8 +138,9 @@ def entrenar_arbol(X_train, X_test, y_train, y_test,
 
 
 def grafica_arbol_decision(modelo: DecisionTreeClassifier) -> plt.Figure:
-
-    print("===== ENTRANDO A grafica_arbol_decision =====")
+    print("=" * 60)
+    print("ENTRANDO A grafica_arbol_decision")
+    print("=" * 60)
 
     n_hojas = modelo.get_n_leaves()
     ancho = max(16, min(40, n_hojas * 1.8))
@@ -162,8 +163,7 @@ def grafica_arbol_decision(modelo: DecisionTreeClassifier) -> plt.Figure:
     )
 
     ruta = os.path.join(RUTAS["graficas"], "15_arbol_visual.png")
-
-    print("Ruta árbol:", ruta)
+    print("Ruta:", ruta)
 
     os.makedirs(os.path.dirname(ruta), exist_ok=True)
 
@@ -174,14 +174,12 @@ def grafica_arbol_decision(modelo: DecisionTreeClassifier) -> plt.Figure:
         facecolor=PALETA.get("fondo", "white")
     )
 
-    print("Existe después de guardar:", os.path.exists(ruta))
+    print(f"✓ Gráfica guardada: {ruta}")
+    print(f"¿Existe?: {os.path.exists(ruta)}")
 
     plt.close(fig)
 
-    print("===== SALIENDO DE grafica_arbol_decision =====")
-
     return fig
-
 
 # -----------------------------------------------------------------------------
 # B. RANDOM FOREST
