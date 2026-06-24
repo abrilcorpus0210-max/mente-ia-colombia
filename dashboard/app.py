@@ -60,21 +60,42 @@ def cargar():
         df = limpiar_datos(verbose=False)
         guardar_procesado(df)
     else:
-        df = pd.read_csv(RUTAS["procesado_casos"],
-                         dtype={"cod_dane_mun": str},
-                         parse_dates=["FEC_NOT", "INI_SIN", "FEC_CON"])
+        df = pd.read_csv(
+            RUTAS["procesado_casos"],
+            dtype={"cod_dane_mun": str},
+            parse_dates=["FEC_NOT", "INI_SIN", "FEC_CON"]
+        )
+
     if not os.path.exists(RUTAS["procesado_mun"]):
         from src.ipi import pipeline_ipi
         mun = pipeline_ipi(df, verbose=False)
     else:
-        mun = pd.read_csv(RUTAS["procesado_mun"], dtype={"cod_dane_mun": str})
+        mun = pd.read_csv(
+            RUTAS["procesado_mun"],
+            dtype={"cod_dane_mun": str}
+        )
 
-    # Generar artefactos del modelo (gráficas + clusters) automáticamente
-    # si aún no existen, para que el usuario nunca tenga que abrir una
-    # terminal y ejecutar `python -m src.modelo` manualmente.
-    ruta_clusters = os.path.join(RUTAS["reportes"], "municipios_clusters.csv")
-    ruta_fi       = os.path.join(RUTAS["graficas"], "11_feature_importance.png")
-    if not (os.path.exists(ruta_clusters) and os.path.exists(ruta_fi)):
+    # Generar artefactos del modelo automáticamente
+    ruta_clusters = os.path.join(
+        RUTAS["reportes"],
+        "municipios_clusters.csv"
+    )
+
+    ruta_fi = os.path.join(
+        RUTAS["graficas"],
+        "11_feature_importance.png"
+    )
+
+    ruta_arbol = os.path.join(
+        RUTAS["graficas"],
+        "15_arbol_visual.png"
+    )
+
+    if not (
+        os.path.exists(ruta_clusters)
+        and os.path.exists(ruta_fi)
+        and os.path.exists(ruta_arbol)
+    ):
         from src.modelo import pipeline_modelos
         pipeline_modelos(mun, verbose=False)
 
@@ -86,6 +107,7 @@ df, mun = cargar()
 # ── Autenticación por contraseña ─────────────────────────────────────────────
 def verificar_password():
     """Bloquea el dashboard hasta ingresar la contraseña de .streamlit/secrets.toml."""
+
     def password_ingresada():
         if st.session_state["pwd_input"] == st.secrets["password"]:
             st.session_state["autenticado"] = True
@@ -104,10 +126,17 @@ def verificar_password():
         "</div>",
         unsafe_allow_html=True
     )
-    st.text_input("Contraseña", type="password",
-                  key="pwd_input", on_change=password_ingresada)
+
+    st.text_input(
+        "Contraseña",
+        type="password",
+        key="pwd_input",
+        on_change=password_ingresada
+    )
+
     if st.session_state.get("autenticado") is False:
         st.error("Contraseña incorrecta. Intenta de nuevo.")
+
     st.stop()
 
 verificar_password()
