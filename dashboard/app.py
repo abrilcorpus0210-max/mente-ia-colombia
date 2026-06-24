@@ -773,7 +773,7 @@ with tab4:
     )
     st.markdown("Tres modelos sobre la tabla municipal (≥5 casos) para clasificar el nivel de prioridad.")
 
-        sub1, sub2, sub3 = st.tabs(["Árbol de Decisión", "Random Forest", "K-Means"])
+    sub1, sub2, sub3 = st.tabs(["Árbol de Decisión", "Random Forest", "K-Means"])
 
     with sub1:
         st.subheader("Árbol de Decisión")
