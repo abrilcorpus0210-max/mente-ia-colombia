@@ -367,6 +367,10 @@ with tab2:
         st.plotly_chart(fig_s, use_container_width=True)
 
     # Por grupo de edad — sin color= para evitar KeyError
+   # Por grupo de edad — el color de resalte (naranja) y el texto de abajo
+    # se calculan dinámicamente según cuál grupo tiene más casos, para que
+    # nunca queden desincronizados con los datos reales (antes asumía
+    # "12–17" fijo, lo cual era falso: 18–25 tiene más casos).
     with col_b:
         st.subheader("Por grupo de edad")
         orden_edad = ["0–11","12–17","18–25","26–35","36–45","46–59","60+"]
@@ -376,8 +380,11 @@ with tab2:
         g["Grupo"] = pd.Categorical(g["Grupo"], categories=orden_edad, ordered=True)
         g = g.sort_values("Grupo").dropna(subset=["Grupo"]).reset_index(drop=True)
         g["Grupo"] = g["Grupo"].astype(str)
-        colores_g = [PALETA["advertencia"] if x=="12–17" else PALETA["primario"]
+
+        grupo_mayor = g.loc[g["Casos"].idxmax(), "Grupo"] if len(g) > 0 else None
+        colores_g = [PALETA["advertencia"] if x == grupo_mayor else PALETA["primario"]
                      for x in g["Grupo"]]
+
         fig_g = go.Figure(go.Bar(
             x=g["Grupo"], y=g["Casos"],
             text=g["Casos"], textposition="outside",
@@ -386,8 +393,8 @@ with tab2:
         fig_g.update_layout(**LAYOUT_BASE, height=320, showlegend=False)
         headroom_vertical(fig_g, g["Casos"])
         st.plotly_chart(fig_g, use_container_width=True)
-    st.caption("📌 El grupo 12–17 años (naranja) concentra la mayor frecuencia relativa.")
-
+    if grupo_mayor:
+        st.caption(f"📌 El grupo {grupo_mayor} años (naranja) concentra el mayor número de casos registrados.")
     # Top 15 departamentos
     st.subheader("Top 15 departamentos con más casos")
     top_d = (df_f["Departamento_ocurrencia"].value_counts()
