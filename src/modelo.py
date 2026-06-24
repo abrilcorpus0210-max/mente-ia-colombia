@@ -26,7 +26,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.tree import DecisionTreeClassifier, export_text
+from sklearn.tree import DecisionTreeClassifier, export_text, plot_tree
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import LabelEncoder, StandardScaler
@@ -65,7 +65,11 @@ FEATURES = [
 
 VARIABLE_OBJETIVO = "nivel_prioridad"
 
-# Orden de clases para matrices y reportes
+# Orden de clases para matrices y reportes (orden de severidad, NO alfabético).
+# IMPORTANTE: este orden es válido para classification_report()/confusion_matrix()
+# porque su parámetro `labels=` solo controla qué filas/columnas mostrar y en qué
+# orden, sin reasignar datos. NO es válido para plot_tree(class_names=...), que
+# exige el orden alfabético real de modelo.classes_ (ver grafica_arbol_decision).
 ORDEN_CLASES = ["Baja", "Media", "Alta", "Crítica"]
 
 
@@ -131,6 +135,59 @@ def entrenar_arbol(X_train, X_test, y_train, y_test,
         print(reglas)
 
     return modelo
+
+
+def grafica_arbol_decision(modelo: DecisionTreeClassifier) -> plt.Figure:
+    """
+    Diagrama visual completo del árbol de decisión entrenado (plot_tree).
+
+    Complementa las reglas en texto (export_text, ya impresas en consola)
+    con una versión gráfica pensada para insertarse en el dashboard
+    (Tab 4 → Árbol de Decisión), donde hasta ahora solo se mostraba la
+    matriz de confusión sin ningún diagrama del árbol en sí.
+
+    Notas de implementación:
+    - El ancho de la figura se ajusta según el número de hojas reales
+      (hasta 32 posibles con max_depth=5) para que las reglas no queden
+      amontonadas ni ilegibles, sin importar cuántas hojas resulten del
+      entrenamiento real.
+    - `class_names` se construye desde `modelo.classes_` (orden alfabético
+      real que usa sklearn internamente: Alta, Baja, Crítica, Media) y NO
+      desde `ORDEN_CLASES` (orden de severidad). plot_tree() asigna las
+      etiquetas de clase por posición, no por nombre: pasar ORDEN_CLASES
+      aquí etiquetaría los nodos con la clase incorrecta de forma
+      silenciosa (ej. un nodo "Alta" real aparecería rotulado "Baja").
+    - `proportion=True` muestra porcentaje de muestras por nodo en vez de
+      conteos absolutos, e `impurity=False` oculta el gini interno: ambos
+      pensados para una audiencia de salud pública, no técnica.
+    """
+    n_hojas = modelo.get_n_leaves()
+    ancho   = max(16, min(40, n_hojas * 1.8))
+
+    fig, ax = plt.subplots(figsize=(ancho, 10))
+    plot_tree(
+        modelo,
+        feature_names=FEATURES,
+        class_names=list(modelo.classes_),  # orden real de sklearn, no ORDEN_CLASES
+        filled=True,
+        rounded=True,
+        proportion=True,
+        impurity=False,
+        fontsize=9,
+        ax=ax
+    )
+    ax.set_title(
+        f"Árbol de Decisión completo — profundidad {modelo.get_depth()}, "
+        f"{n_hojas} hojas\nClasificación de nivel de prioridad municipal",
+        fontsize=13
+    )
+    fig.tight_layout()
+    ruta = os.path.join(RUTAS["graficas"], "15_arbol_visual.png")
+    os.makedirs(os.path.dirname(ruta), exist_ok=True)
+    fig.savefig(ruta, dpi=150, bbox_inches="tight", facecolor=PALETA.get("fondo", "white"))
+    plt.close(fig)
+    print(f"  ✓ Gráfica guardada: {ruta}")
+    return fig
 
 
 # -----------------------------------------------------------------------------
@@ -438,6 +495,7 @@ def pipeline_modelos(mun: pd.DataFrame = None, verbose: bool = True) -> dict:
 
     # A. Árbol de Decisión
     modelo_dt = entrenar_arbol(X_train, X_test, y_train, y_test, verbose)
+    grafica_arbol_decision(modelo_dt)
     grafica_matriz_confusion(modelo_dt, X_test, y_test, "Árbol de Decisión")
 
     # Guardar métricas del DT como CSV para el dashboard
