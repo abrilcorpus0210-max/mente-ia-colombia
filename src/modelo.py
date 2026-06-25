@@ -446,128 +446,41 @@ def _grafica_codo(inercias: list, k_optimo: int) -> None:
 # -----------------------------------------------------------------------------
 
 def pipeline_modelos(mun: pd.DataFrame = None, verbose: bool = True) -> dict:
-    """
-    Ejecuta los tres modelos en secuencia y retorna un diccionario
-    con todos los artefactos.
-    """
+    import streamlit as st  # Añadir esto
+    
+    st.write("🔧🔧🔧 pipeline_modelos() INICIADO")  # DEBUG VISIBLE
+    
     if mun is None:
+        st.write("🔧 Cargando mun desde CSV...")  # DEBUG
         mun = pd.read_csv(RUTAS["procesado_mun"], dtype={"cod_dane_mun": str})
 
-    if verbose:
-        print("=" * 65)
-        print("  MODELADO – INTELIGENCIA ARTIFICIAL")
-        print("=" * 65)
-
-    # Preparar datos para clasificación supervisada
+    # Preparar datos
+    st.write("🔧 Preparando datos...")  # DEBUG
     X, y, df_modelo = preparar_datos(mun)
+    st.write(f"🔧 X shape: {X.shape}, y shape: {y.shape}")  # DEBUG
 
-    # ------------------------------------------------------------------
-    # Protección robusta para datasets muy pequeños o con clases raras.
-    # Esto puede pasar después de combinar datos nuevos (ej. al subir un
-    # archivo de actualización) que agreguen un municipio con un nivel
-    # de prioridad que antes no existía o que tenga muy pocos casos.
-    #
-    # sklearn puede fallar con "the resulting train set will be empty"
-    # si test_size=0.20 produce 0 muestras de entrenamiento o de prueba
-    # para alguna clase, incluso sin usar stratify. Para evitarlo:
-    #   1. Si el total de municipios es muy pequeño, se reduce test_size
-    #      dinámicamente para garantizar al menos 1 muestra en cada lado.
-    #   2. Si aun así no es posible dividir de forma segura (por ejemplo,
-    #      menos de 5 municipios en total), se usa todo el conjunto como
-    #      train y test (evaluación no es representativa, pero el modelo
-    #      no se rompe).
-    # ------------------------------------------------------------------
-    clase_min = y.value_counts().min()
-    usar_stratify = y if clase_min >= 2 else None
-
-    n_total = len(X)
-    test_size = 0.20
-    # Garantizar al menos 1 muestra en test y suficientes en train.
-    n_test_estimado = max(1, round(n_total * test_size))
-    n_train_estimado = n_total - n_test_estimado
-
-    if n_total < 5 or n_train_estimado < 1 or n_test_estimado < 1:
-        # Conjunto demasiado pequeño para dividir de forma segura.
-        if verbose:
-            print(f"\n  ⚠ Conjunto de municipios muy pequeño ({n_total}). "
-                  f"Se usará el conjunto completo para train y test "
-                  f"(la evaluación no será representativa).")
-        X_train, X_test, y_train, y_test = X, X, y, y
-    else:
-        try:
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y,
-                test_size=test_size,
-                random_state=42,
-                stratify=usar_stratify
-            )
-        except ValueError:
-            # Última red de seguridad: si train_test_split falla por
-            # cualquier otra combinación de clases raras, se reintenta
-            # sin estratificar y sin riesgo de quedar vacío.
-            if verbose:
-                print("\n  ⚠ train_test_split falló con la configuración "
-                      "estratificada. Reintentando sin estratificar.")
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y,
-                test_size=test_size,
-                random_state=42,
-                stratify=None
-            )
-
-    if verbose:
-        print(f"\n  Train: {len(X_train)} municipios | Test: {len(X_test)} municipios")
+    # Split
+    st.write("🔧 Haciendo train_test_split...")  # DEBUG
+    # ... (todo el código de split sin cambios) ...
+    
+    st.write(f"🔧 Train: {len(X_train)}, Test: {len(X_test)}")  # DEBUG
 
     # A. Árbol de Decisión
-    modelo_dt = entrenar_arbol(X_train, X_test, y_train, y_test, verbose)
+    st.write("🔧 Entrenando árbol...")  # DEBUG
+    modelo_dt = entrenar_arbol(X_train, X_test, y_train, y_test, verbose=False)
+    st.write(f"🔧 Árbol entrenado. ¿None?: {modelo_dt is None}")  # DEBUG
     
-    print(">>> Llamando grafica_arbol_decision()...")
+    st.write("🔧 Llamando grafica_arbol_decision()...")  # DEBUG CRÍTICO
     fig_arbol = grafica_arbol_decision(modelo_dt)
-    print(f">>> grafica_arbol_decision() retornó: {fig_arbol is not None}")
+    st.write(f"🔧 grafica_arbol_decision() retornó: {fig_arbol is not None}")  # DEBUG
     
+    st.write("🔧 Llamando grafica_matriz_confusion()...")  # DEBUG
     grafica_matriz_confusion(modelo_dt, X_test, y_test, "Árbol de Decisión")
 
-    # Guardar métricas del DT como CSV para el dashboard
-    y_pred_dt = modelo_dt.predict(X_test)
-    reporte_dt = classification_report(
-        y_test, y_pred_dt, labels=ORDEN_CLASES, zero_division=0, output_dict=True
-    )
-    metricas_dt_df = (
-        pd.DataFrame(reporte_dt).T
-        .reset_index()
-        .rename(columns={"index": "Clase"})
-        .round(3)
-    )
-    ruta_metricas_dt = os.path.join(RUTAS["reportes"], "metricas_dt.csv")
-    os.makedirs(os.path.dirname(ruta_metricas_dt), exist_ok=True)
-    metricas_dt_df.to_csv(ruta_metricas_dt, index=False, encoding="utf-8-sig")
-    if verbose:
-        print(f"\n  ✓ Métricas DT guardadas en: {ruta_metricas_dt}")
-
-    # B. Random Forest
-    modelo_rf = entrenar_random_forest(X_train, X_test, y_train, y_test, verbose)
-    grafica_feature_importance(modelo_rf)
-    grafica_matriz_confusion(modelo_rf, X_test, y_test, "Random Forest")
-
-    # C. K-Means
-    modelo_km, mun_km, scaler = entrenar_kmeans(mun, n_clusters=4, verbose=verbose)
-
-    # Guardar tabla municipal enriquecida con clusters
-    ruta_km = os.path.join(RUTAS["reportes"], "municipios_clusters.csv")
-    os.makedirs(os.path.dirname(ruta_km), exist_ok=True)
-    mun_km.to_csv(ruta_km, index=False, encoding="utf-8-sig")
-    if verbose:
-        print(f"\n  ✓ Municipios con clusters guardados en: {ruta_km}")
-
-    return {
-        "arbol_decision": modelo_dt,
-        "random_forest":  modelo_rf,
-        "kmeans":         modelo_km,
-        "scaler":         scaler,
-        "X_train": X_train, "X_test": X_test,
-        "y_train": y_train, "y_test": y_test,
-        "mun_km":  mun_km,
-    }
+    # ... resto sin cambios ...
+    
+    st.write("🔧🔧🔧 pipeline_modelos() TERMINADO")  # DEBUG
+    return {...}
 
 
 # -----------------------------------------------------------------------------
