@@ -170,6 +170,7 @@ def cargar_o_crear_poblacion() -> pd.DataFrame:
 
 
 # -----------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # CONSTRUCCIÓN DE LA TABLA MUNICIPAL
 # -----------------------------------------------------------------------------
 
@@ -181,24 +182,26 @@ def construir_tabla_municipal(df: pd.DataFrame) -> pd.DataFrame:
     Retorna un DataFrame con una fila por municipio.
     """
     # ---- Indicadores base ----
-    df["es_adolescente_flag"] = df["EDAD"].between(12, 17).astype(int)
-    df["es_hospit_flag"]      = (df["PAC_HOS"] == 1).astype(int)
-    df["es_psiquia_flag"]     = (df["GP_PSIQUIA"] == 1).astype(int)
-    df["semestre_num"]        = (df["SEMANA"] > 26).astype(int)
+    df["es_adolescente_flag"]    = df["EDAD"].between(12, 17).astype(int)
+    df["es_joven_adulto_flag"]   = df["EDAD"].between(18, 25).astype(int)   # ← NUEVO
+    df["es_hospit_flag"]         = (df["PAC_HOS"] == 1).astype(int)
+    df["es_psiquia_flag"]        = (df["GP_PSIQUIA"] == 1).astype(int)
+    df["semestre_num"]           = (df["SEMANA"] > 26).astype(int)
 
     mun = df.groupby(
         ["cod_dane_mun", "Departamento_ocurrencia", "Municipio_ocurrencia"],
         observed=True
     ).agg(
-        total_casos       = ("CONSECUTIVE",        "count"),
-        pct_adolescentes  = ("es_adolescente_flag", "mean"),
-        pct_hospit        = ("es_hospit_flag",      "mean"),
-        pct_psiquia       = ("es_psiquia_flag",     "mean"),
-        casos_H1          = ("semestre_num",        lambda x: (x == 0).sum()),
-        casos_H2          = ("semestre_num",        lambda x: (x == 1).sum()),
-        pct_menores       = ("es_menor",            "mean"),
-        pct_mujeres       = ("SEXO",                lambda x: (x == "F").mean()),
-        pct_rural         = ("es_rural",            "mean"),
+        total_casos          = ("CONSECUTIVE",              "count"),
+        pct_adolescentes     = ("es_adolescente_flag",      "mean"),
+        pct_jovenes_adultos  = ("es_joven_adulto_flag",     "mean"),   # ← NUEVO
+        pct_hospit           = ("es_hospit_flag",           "mean"),
+        pct_psiquia          = ("es_psiquia_flag",          "mean"),
+        casos_H1             = ("semestre_num",             lambda x: (x == 0).sum()),
+        casos_H2             = ("semestre_num",             lambda x: (x == 1).sum()),
+        pct_menores          = ("es_menor",                 "mean"),
+        pct_mujeres          = ("SEXO",                     lambda x: (x == "F").mean()),
+        pct_rural            = ("es_rural",                 "mean"),
     ).reset_index()
 
     # Tendencia: crecimiento de H2 respecto a H1
@@ -235,7 +238,6 @@ def construir_tabla_municipal(df: pd.DataFrame) -> pd.DataFrame:
     mun["tasa_x100k"] = (mun["total_casos"] / mun["poblacion"]) * 100_000
 
     return mun
-
 
 # -----------------------------------------------------------------------------
 # NORMALIZACIÓN MIN-MAX
