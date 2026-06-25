@@ -817,26 +817,54 @@ with tab4:
 
     sub1, sub2, sub3 = st.tabs(["Árbol de Decisión", "Random Forest", "K-Means"])
 
-    with sub1:
+        with sub1:
         st.subheader("Árbol de Decisión")
 
         st.markdown("""
         **Parámetros:** `max_depth=5`, `class_weight='balanced'`, `criterion='gini'`
-
         Genera reglas legibles directamente interpretables por equipos de salud pública.
         """)
 
+        # ====== DIAGNÓSTICO ======
         img_arbol = os.path.join(RUTAS["graficas"], "15_arbol_visual.png")
         ruta_error_arbol = os.path.join(RUTAS["graficas"], "15_arbol_visual_ERROR.txt")
         ruta_reglas = os.path.join(RUTAS["reportes"], "reglas_arbol_texto.txt")
+        
+        # Mostrar rutas exactas para debug
+        with st.expander("🔧 Diagnóstico de rutas (desplegar para ver)"):
+            st.code(f"""
+Ruta buscada PNG:    {img_arbol}
+Existe PNG?:         {os.path.exists(img_arbol)}
+Ruta error:          {ruta_error_arbol}
+Existe error?:       {os.path.exists(ruta_error_arbol)}
+Ruta reglas:         {ruta_reglas}
+Existe reglas?:      {os.path.exists(ruta_reglas)}
+Tamaño PNG (bytes):  {os.path.getsize(img_arbol) if os.path.exists(img_arbol) else 'N/A'}
+            """)
+            
+            # Listar TODO lo que hay en la carpeta graficas
+            st.write("**Archivos en carpeta gráficas:**")
+            graficas_dir = RUTAS["graficas"]
+            if os.path.exists(graficas_dir):
+                archivos = os.listdir(graficas_dir)
+                st.write(archivos if archivos else "(carpeta vacía)")
+            else:
+                st.error(f"¡La carpeta no existe!: {graficas_dir}")
+                
+            # Listar TODO lo que hay en reportes
+            st.write("**Archivos en carpeta reportes:**")
+            reportes_dir = RUTAS["reportes"]
+            if os.path.exists(reportes_dir):
+                archivos = os.listdir(reportes_dir)
+                st.write(archivos if archivos else "(carpeta vacía)")
+            else:
+                st.error(f"¡La carpeta no existe!: {reportes_dir}")
+        # ====== FIN DIAGNÓSTICO ======
 
         # Mostrar diagrama si existe
         if os.path.exists(img_arbol):
-            # Usar container_width en vez de use_column_width (deprecado)
             st.image(img_arbol, caption="Diagrama completo del árbol entrenado",
                      use_container_width=True)
-            
-            # Opcional: permitir descargar la imagen
             with open(img_arbol, "rb") as f:
                 st.download_button(
                     label="⬇️ Descargar diagrama (PNG)",
@@ -845,13 +873,11 @@ with tab4:
                     mime="image/png"
                 )
         else:
-            # Si no hay imagen, mostrar fallback o error
             if os.path.exists(ruta_error_arbol):
                 with st.expander("⚠️ Error al generar diagrama — ver detalles"):
                     with open(ruta_error_arbol, encoding="utf-8") as f:
                         st.code(f.read())
             
-            # Fallback: mostrar reglas de texto
             if os.path.exists(ruta_reglas):
                 with st.expander("📋 Ver reglas del árbol (texto)", expanded=True):
                     with open(ruta_reglas, encoding="utf-8") as f:
@@ -869,16 +895,10 @@ with tab4:
         # Matriz de confusión
         img_conf = os.path.join(RUTAS["graficas"], "13_confusion_dt.png")
         if os.path.exists(img_conf):
-            st.image(
-                img_conf,
-                caption="Matriz de confusión – Árbol de Decisión",
-                use_container_width=True
-            )
+            st.image(img_conf, caption="Matriz de confusión – Árbol de Decisión",
+                     use_container_width=True)
         else:
-            st.info(
-                "Los resultados del modelo se están preparando. "
-                "Vuelve a cargar la página en unos segundos."
-            )
+            st.info("La matriz de confusión se está preparando.")
     with sub2:
         st.subheader("Random Forest")
 
