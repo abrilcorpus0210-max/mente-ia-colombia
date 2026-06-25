@@ -820,18 +820,16 @@ with tab4:
         """)
 
         img_arbol = os.path.join(RUTAS["graficas"], "15_arbol_visual.png")
-
+        ruta_error_arbol = os.path.join(RUTAS["graficas"], "15_arbol_visual_ERROR.txt")
         if os.path.exists(img_arbol):
-            st.image(
-                img_arbol,
-                caption="Diagrama completo del árbol entrenado",
-                use_column_width=True
-            )
+            st.image(img_arbol, caption="Diagrama completo del árbol entrenado",
+                     use_column_width=True)
+        elif os.path.exists(ruta_error_arbol):
+            st.error("No se pudo generar el diagrama del árbol. Detalle del error:")
+            with open(ruta_error_arbol, encoding="utf-8") as f:
+                st.code(f.read())
         else:
-            st.info(
-                "El diagrama del árbol se está preparando. "
-                "Vuelve a cargar la página en unos segundos."
-            )
+            st.info("El diagrama del árbol se está preparando. Vuelve a cargar la página en unos segundos.")
 
         img_conf = os.path.join(RUTAS["graficas"], "13_confusion_dt.png")
 
