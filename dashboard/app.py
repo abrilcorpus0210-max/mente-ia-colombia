@@ -55,7 +55,6 @@ st.markdown(f"""
 # ── Carga de datos ─────────────────────────────────────────────────────────
 @st.cache_data(show_spinner="Cargando datos y preparando modelos (puede tardar un momento la primera vez)...")
 def cargar():
-    
     # BORRAR ARTEFACTOS VIEJOS DEL ÁRBOL (quitar después de 1 carga exitosa)
     artefactos_viejos = [
         os.path.join(RUTAS["graficas"], "15_arbol_visual.png"),
@@ -68,9 +67,7 @@ def cargar():
             os.remove(ruta)
             print(f"🗑️ Borrado: {os.path.basename(ruta)}")
     # FIN BLOQUE TEMPORAL
-    
-    if not os.path.exists(RUTAS["procesado_casos"]):
-        # ... resto sin cambios
+
     if not os.path.exists(RUTAS["procesado_casos"]):
         from src.limpieza import limpiar_datos, guardar_procesado
         df = limpiar_datos(verbose=False)
