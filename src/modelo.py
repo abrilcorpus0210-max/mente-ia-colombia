@@ -138,36 +138,43 @@ def entrenar_arbol(X_train, X_test, y_train, y_test,
 
 
 def grafica_arbol_decision(modelo: DecisionTreeClassifier) -> plt.Figure:
+    """
+    Diagrama visual completo del árbol de decisión entrenado (plot_tree).
+    """
     import traceback
     import warnings
     warnings.filterwarnings('ignore')
     
+    # Asegurar que las carpetas existen ANTES de cualquier operación
+    os.makedirs(RUTAS["graficas"], exist_ok=True)
+    os.makedirs(RUTAS["reportes"], exist_ok=True)
+    
     ruta_error = os.path.join(RUTAS["graficas"], "15_arbol_visual_ERROR.txt")
     ruta_fallback = os.path.join(RUTAS["reportes"], "reglas_arbol_texto.txt")
+    ruta_png = os.path.join(RUTAS["graficas"], "15_arbol_visual.png")
 
-    print(">>> INICIANDO grafica_arbol_decision()")  # DEBUG
-    
     try:
         import matplotlib
         matplotlib.use("Agg", force=True)
         import matplotlib.pyplot as plt
         
-        print(f">>> Backend matplotlib: {matplotlib.get_backend()}")  # DEBUG
-        print(f">>> Hojas: {modelo.get_n_leaves()}, Profundidad: {modelo.get_depth()}")  # DEBUG
-        
         n_hojas = modelo.get_n_leaves()
         profundidad = modelo.get_depth()
         
-        ancho = max(14, min(24, n_hojas * 1.0 + 6))
-        alto = max(8, min(12, profundidad * 1.5 + 2))
+        print(f">>> grafica_arbol_decision: {n_hojas} hojas, profundidad {profundidad}")
         
-        print(f">>> Creando figura: {ancho}x{alto}")  # DEBUG
+        # Si el árbol es muy pequeño, usar dimensiones fijas
+        if n_hojas <= 2:
+            ancho, alto = 14, 8
+        elif n_hojas <= 8:
+            ancho, alto = 18, 10
+        else:
+            ancho = min(24, n_hojas * 1.2 + 4)
+            alto = min(12, profundidad * 1.5 + 2)
         
         fig, ax = plt.subplots(figsize=(ancho, alto))
         
-        fontsize = max(8, min(11, 180 // max(n_hojas, 1)))
-        
-        print(f">>> Ejecutando plot_tree...")  # DEBUG
+        fontsize = max(8, min(10, 200 // max(n_hojas, 1)))
         
         plot_tree(
             modelo,
@@ -182,57 +189,47 @@ def grafica_arbol_decision(modelo: DecisionTreeClassifier) -> plt.Figure:
             precision=2
         )
         
-        print(f">>> plot_tree ejecutado OK")  # DEBUG
-        
         ax.set_title(
             f"Árbol de Decisión — profundidad {profundidad}, {n_hojas} hojas\n"
             f"Clasificación de nivel de prioridad municipal",
             fontsize=12, pad=15
         )
         
-        ruta = os.path.join(RUTAS["graficas"], "15_arbol_visual.png")
-        os.makedirs(os.path.dirname(ruta), exist_ok=True)
-        
-        print(f">>> Guardando en: {ruta}")  # DEBUG
-        
-        fig.savefig(
-            ruta, 
-            dpi=120, 
-            bbox_inches="tight", 
-            facecolor="white",
-            format="png"
-        )
+        fig.savefig(ruta_png, dpi=120, bbox_inches="tight", 
+                    facecolor="white", format="png")
         plt.close(fig)
         
-        print(f">>> Guardado OK, verificando...")  # DEBUG
-        
-        if os.path.exists(ruta) and os.path.getsize(ruta) > 0:
+        # Verificación explícita
+        if os.path.exists(ruta_png) and os.path.getsize(ruta_png) > 100:
             if os.path.exists(ruta_error):
                 os.remove(ruta_error)
-            print(f"  ✓ Gráfica guardada: {ruta} ({os.path.getsize(ruta)} bytes)")
+            print(f"  ✓ Gráfica guardada: {ruta_png} ({os.path.getsize(ruta_png)} bytes)")
             return fig
         else:
-            raise RuntimeError(f"El archivo se guardó pero está vacío o no existe: {ruta}")
+            raise RuntimeError(f"Archivo PNG no válido: {ruta_png}")
 
     except Exception as e:
-        print(f">>> ERROR: {type(e).__name__}: {e}")  # DEBUG
-        os.makedirs(os.path.dirname(ruta_error), exist_ok=True)
-        with open(ruta_error, "w", encoding="utf-8") as f:
-            f.write(f"{type(e).__name__}: {e}\n\n")
-            f.write(traceback.format_exc())
+        error_msg = f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}"
+        print(f">>> ERROR en grafica_arbol_decision: {error_msg}")
         
+        # Escribir error SIEMPRE
         try:
-            os.makedirs(os.path.dirname(ruta_fallback), exist_ok=True)
+            with open(ruta_error, "w", encoding="utf-8") as f:
+                f.write(error_msg)
+        except Exception as e2:
+            print(f">>> No se pudo escribir error: {e2}")
+        
+        # Fallback a reglas de texto
+        try:
             with open(ruta_fallback, "w", encoding="utf-8") as f:
                 f.write("REGLAS DEL ÁRBOL DE DECISIÓN\n")
                 f.write("=" * 60 + "\n\n")
                 f.write(f"Profundidad: {modelo.get_depth()} | Hojas: {modelo.get_n_leaves()}\n")
                 f.write(f"Clases: {', '.join(modelo.classes_)}\n\n")
                 f.write(export_text(modelo, feature_names=FEATURES, max_depth=5))
-            print(f"  ⚠ plot_tree falló, reglas de texto generadas")
+            print(f"  ⚠ Fallback generado: {ruta_fallback}")
         except Exception as e2:
-            with open(ruta_error, "a", encoding="utf-8") as f:
-                f.write(f"\n\nFALLBACK TAMBIÉN FALLÓ: {e2}\n")
+            print(f">>> Fallback también falló: {e2}")
         
         return None
 
