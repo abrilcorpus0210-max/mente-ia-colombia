@@ -395,10 +395,10 @@ def entrenar_kmeans(mun: pd.DataFrame, n_clusters: int = 4,
     # Etiquetar clusters por tasa promedio (de menor a mayor = Bajo → Alto)
     orden_clusters = perfil["tasa_x100k"].rank().astype(int) - 1
     etiquetas_cluster = {
-        0: "Cluster A – Carga Baja",
-        1: "Cluster B – Carga Media",
-        2: "Cluster C – Carga Alta",
-        3: "Cluster D – Carga Crítica",
+        0: "Cluster A – Perfil Rural/Bajo",
+        1: "Cluster B – Perfil Urbano Medio",
+        2: "Cluster C – Metrópoli Única (Bogotá)",
+        3: "Cluster D – Ciudades Grandes/Medianas",
     }
     mun_km["perfil_cluster"] = mun_km["cluster_kmeans"].map(
         {v: etiquetas_cluster.get(k, f"Cluster {k}")
