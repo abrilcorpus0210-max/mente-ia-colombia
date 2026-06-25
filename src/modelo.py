@@ -287,19 +287,25 @@ def grafica_feature_importance(modelo: RandomForestClassifier) -> plt.Figure:
     """Gráfica de barras horizontales con la importancia de cada variable."""
     fi = pd.Series(modelo.feature_importances_, index=FEATURES).sort_values()
 
-    etiquetas = {
-      
-    "tasa_x100k":          "Tasa por 100k hab.",
-    "pct_adolescentes":    "% Adolescentes (12–17)",    
-    "pct_jovenes_adultos": "% Jóvenes Adultos (18–25)",  
-    "tendencia_H2_H1":     "Tendencia H2 vs H1",
-    "pct_hospit":          "% Hospitalizados",
-    "pct_psiquia":         "% Antec. psiquiátrico",
-    "total_casos":         "Total de casos",
-    "pct_menores":         "% Menores de 18",
-    "pct_mujeres":         "% Femenino",
-    "pct_rural":           "% Rural",
+    # === DEBUG: mostrar en el dashboard ===
+    import streamlit as st
+    st.write("### 🔍 Debug: Importancias reales")
+    fi_debug = pd.Series(modelo.feature_importances_, index=FEATURES).sort_values(ascending=False)
+    st.dataframe(fi_debug.reset_index().rename(columns={"index": "Variable", 0: "Importancia"}))
+    st.write(f"**pct_jovenes_adultos = {fi_debug.get('pct_jovenes_adultos', 'NO ENCONTRADO')}**")
+    # =====================================
 
+    etiquetas = {
+        "tasa_x100k":          "Tasa por 100k hab.",
+        "pct_adolescentes":    "% Adolescentes (12–17)",    
+        "pct_jovenes_adultos": "% Jóvenes Adultos (18–25)",  
+        "tendencia_H2_H1":     "Tendencia H2 vs H1",
+        "pct_hospit":          "% Hospitalizados",
+        "pct_psiquia":         "% Antec. psiquiátrico",
+        "total_casos":         "Total de casos",
+        "pct_menores":         "% Menores de 18",
+        "pct_mujeres":         "% Femenino",
+        "pct_rural":           "% Rural",
     }
     fi.index = [etiquetas.get(i, i) for i in fi.index]
 
@@ -320,39 +326,6 @@ def grafica_feature_importance(modelo: RandomForestClassifier) -> plt.Figure:
     ax.legend()
     fig.tight_layout()
     ruta = os.path.join(RUTAS["graficas"], "11_feature_importance.png")
-    os.makedirs(os.path.dirname(ruta), exist_ok=True)
-    fig.savefig(ruta, dpi=150, bbox_inches="tight", facecolor=PALETA["fondo"])
-    print(f"  ✓ Gráfica guardada: {ruta}")
-    return fig
-
-
-def grafica_matriz_confusion(modelo, X_test, y_test, titulo: str) -> plt.Figure:
-    """Matriz de confusión normalizada."""
-    y_pred = modelo.predict(X_test)
-    cm     = confusion_matrix(y_test, y_pred, labels=ORDEN_CLASES, normalize="true")
-
-    fig, ax = plt.subplots(figsize=(7, 6))
-    im = ax.imshow(cm, cmap=plt.cm.Blues, vmin=0, vmax=1)
-    plt.colorbar(im, ax=ax, label="Proporción")
-
-    ax.set_xticks(range(len(ORDEN_CLASES)))
-    ax.set_yticks(range(len(ORDEN_CLASES)))
-    ax.set_xticklabels(ORDEN_CLASES, rotation=30)
-    ax.set_yticklabels(ORDEN_CLASES)
-
-    for i in range(len(ORDEN_CLASES)):
-        for j in range(len(ORDEN_CLASES)):
-            color = "white" if cm[i, j] > 0.5 else PALETA["neutro"]
-            ax.text(j, i, f"{cm[i,j]:.2f}", ha="center", va="center",
-                    color=color, fontsize=10)
-
-    ax.set_xlabel("Predicho")
-    ax.set_ylabel("Real")
-    ax.set_title(f"Matriz de confusión (normalizada)\n{titulo}")
-    fig.tight_layout()
-
-    nombre_archivo = "12_confusion_rf.png" if "Forest" in titulo else "13_confusion_dt.png"
-    ruta = os.path.join(RUTAS["graficas"], nombre_archivo)
     os.makedirs(os.path.dirname(ruta), exist_ok=True)
     fig.savefig(ruta, dpi=150, bbox_inches="tight", facecolor=PALETA["fondo"])
     print(f"  ✓ Gráfica guardada: {ruta}")
