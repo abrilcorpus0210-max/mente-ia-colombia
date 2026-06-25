@@ -811,40 +811,61 @@ with tab4:
         **Parámetros:** `max_depth=5`, `class_weight='balanced'`, `criterion='gini'`
 
         Genera reglas legibles directamente interpretables por equipos de salud pública.
-
-        ```
-        Si tasa_x100k > umbral_A
-          y pct_adolescentes > umbral_B
-          → Prioridad: Alta
-        ```
         """)
 
         img_arbol = os.path.join(RUTAS["graficas"], "15_arbol_visual.png")
         ruta_error_arbol = os.path.join(RUTAS["graficas"], "15_arbol_visual_ERROR.txt")
+        ruta_reglas = os.path.join(RUTAS["reportes"], "reglas_arbol_texto.txt")
+
+        # Mostrar diagrama si existe
         if os.path.exists(img_arbol):
+            # Usar container_width en vez de use_column_width (deprecado)
             st.image(img_arbol, caption="Diagrama completo del árbol entrenado",
-                     use_column_width=True)
-        elif os.path.exists(ruta_error_arbol):
-            st.error("No se pudo generar el diagrama del árbol. Detalle del error:")
-            with open(ruta_error_arbol, encoding="utf-8") as f:
-                st.code(f.read())
+                     use_container_width=True)
+            
+            # Opcional: permitir descargar la imagen
+            with open(img_arbol, "rb") as f:
+                st.download_button(
+                    label="⬇️ Descargar diagrama (PNG)",
+                    data=f,
+                    file_name="arbol_decision_prisma.png",
+                    mime="image/png"
+                )
         else:
-            st.info("El diagrama del árbol se está preparando. Vuelve a cargar la página en unos segundos.")
+            # Si no hay imagen, mostrar fallback o error
+            if os.path.exists(ruta_error_arbol):
+                with st.expander("⚠️ Error al generar diagrama — ver detalles"):
+                    with open(ruta_error_arbol, encoding="utf-8") as f:
+                        st.code(f.read())
+            
+            # Fallback: mostrar reglas de texto
+            if os.path.exists(ruta_reglas):
+                with st.expander("📋 Ver reglas del árbol (texto)", expanded=True):
+                    with open(ruta_reglas, encoding="utf-8") as f:
+                        st.text(f.read())
+            else:
+                st.info("El diagrama del árbol se está preparando. Vuelve a cargar la página en unos segundos.")
 
+        # Métricas del árbol
+        ruta_metricas_dt = os.path.join(RUTAS["reportes"], "metricas_dt.csv")
+        if os.path.exists(ruta_metricas_dt):
+            with st.expander("📊 Ver métricas detalladas del Árbol de Decisión"):
+                metricas_dt = pd.read_csv(ruta_metricas_dt)
+                st.dataframe(metricas_dt, use_container_width=True, hide_index=True)
+
+        # Matriz de confusión
         img_conf = os.path.join(RUTAS["graficas"], "13_confusion_dt.png")
-
         if os.path.exists(img_conf):
             st.image(
                 img_conf,
                 caption="Matriz de confusión – Árbol de Decisión",
-                use_column_width=True
+                use_container_width=True
             )
         else:
             st.info(
                 "Los resultados del modelo se están preparando. "
                 "Vuelve a cargar la página en unos segundos."
             )
-
     with sub2:
         st.subheader("Random Forest")
 
