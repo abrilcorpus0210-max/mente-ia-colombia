@@ -137,50 +137,55 @@ def entrenar_arbol(X_train, X_test, y_train, y_test,
     return modelo
 
 
-def grafica_arbol_decision(modelo: DecisionTreeClassifier) -> plt.Figure:
-    print("=" * 60)
-    print("ENTRANDO A grafica_arbol_decision")
-    print("=" * 60)
+def grafica_arbol_decision(modelo):
 
-    n_hojas = modelo.get_n_leaves()
-    ancho = max(16, min(40, n_hojas * 1.8))
+    print(">>> INICIO grafica_arbol_decision")
 
-    print(f"Hojas: {n_hojas}")
-    print(f"Ancho: {ancho}")
+    try:
 
-    fig, ax = plt.subplots(figsize=(ancho, 10))
+        n_hojas = modelo.get_n_leaves()
 
-    plot_tree(
-        modelo,
-        feature_names=FEATURES,
-        class_names=list(modelo.classes_),
-        filled=True,
-        rounded=True,
-        proportion=True,
-        impurity=False,
-        fontsize=9,
-        ax=ax
-    )
+        print(f">>> hojas: {n_hojas}")
 
-    ruta = os.path.join(RUTAS["graficas"], "15_arbol_visual.png")
-    print("Ruta:", ruta)
+        ancho = max(16, min(40, n_hojas * 1.8))
 
-    os.makedirs(os.path.dirname(ruta), exist_ok=True)
+        fig, ax = plt.subplots(figsize=(ancho, 10))
 
-    fig.savefig(
-        ruta,
-        dpi=150,
-        bbox_inches="tight",
-        facecolor=PALETA.get("fondo", "white")
-    )
+        print(">>> antes de plot_tree")
 
-    print(f"✓ Gráfica guardada: {ruta}")
-    print(f"¿Existe?: {os.path.exists(ruta)}")
+        plot_tree(
+            modelo,
+            feature_names=FEATURES,
+            class_names=list(modelo.classes_),
+            filled=True,
+            rounded=True,
+            proportion=True,
+            impurity=False,
+            fontsize=9,
+            ax=ax
+        )
 
-    plt.close(fig)
+        print(">>> despues de plot_tree")
 
-    return fig
+        ruta = os.path.join(
+            RUTAS["graficas"],
+            "15_arbol_visual.png"
+        )
 
+        os.makedirs(os.path.dirname(ruta), exist_ok=True)
+
+        print(">>> antes de savefig")
+
+        fig.savefig(
+            ruta,
+            dpi=150,
+            bbox_inches="tight"
+        )
+
+        print(">>> despues de savefig")
+
+    except Exception as e:
+        print("ERROR ARBOL:", e)
 # -----------------------------------------------------------------------------
 # B. RANDOM FOREST
 # -----------------------------------------------------------------------------
