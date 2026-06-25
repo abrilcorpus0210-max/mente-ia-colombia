@@ -1085,6 +1085,12 @@ with tab5:
 # regenerar todo el dashboard (limpieza, IPI, modelos) automáticamente,
 # sin necesidad de tocar código ni la terminal.
 # ===========================================================================
+# ===========================================================================
+# TAB 6 – ACTUALIZAR DATOS
+# Permite subir un nuevo archivo Excel (mismo formato de SIVIGILA) y
+# regenerar todo el dashboard (limpieza, IPI, modelos) automáticamente,
+# sin necesidad de tocar código ni la terminal.
+# ===========================================================================
 with tab6:
     st.header("📤 Actualizar Datos del Sistema")
     st.markdown(
@@ -1175,17 +1181,6 @@ with tab6:
                         from src.carga import cargar_datos
 
                         # ---- Obtener la base existente (crudo acumulado) ----
-                        # Orden de prioridad para encontrar los datos actuales:
-                        #   1. El acumulado crudo de una actualización anterior
-                        #      (data/raw/datos_crudos_acumulados.csv), si existe.
-                        #   2. El archivo ya procesado (casos_limpios.csv), del
-                        #      cual se reconstruyen las columnas crudas que
-                        #      limpiar_datos() necesita (ANO, COD_EVE). Este es
-                        #      el camino normal en Streamlit Cloud, donde el
-                        #      Excel original NO está disponible (se excluye
-                        #      del repositorio por tamaño y privacidad).
-                        #   3. El Excel original, solo si existe en disco
-                        #      (entorno local con la carpeta data/raw completa).
                         ruta_acumulado = RUTAS["raw_acumulado"]
                         ruta_procesado = RUTAS["procesado_casos"]
 
@@ -1200,9 +1195,6 @@ with tab6:
                                 ruta_procesado,
                                 dtype={"COD_DPTO_O": str, "COD_MUN_O": str}
                             )
-                            # Reconstruir columnas crudas constantes que se
-                            # descartan durante la limpieza, pero que
-                            # limpiar_datos() vuelve a necesitar al reprocesar.
                             if "COD_EVE" not in df_existente.columns:
                                 df_existente["COD_EVE"] = 356
                             if "ANO" not in df_existente.columns:
@@ -1226,18 +1218,11 @@ with tab6:
                         antes_nuevo = len(df_nuevo_crudo)
 
                         # ---- Respaldo automático ANTES de modificar nada ----
-                        # Permite restaurar la versión anterior desde el botón
-                        # "Restaurar datos originales" más abajo, sin tener
-                        # que volver a subir el Excel completo de SIVIGILA.
                         ruta_respaldo_casos = ruta_procesado.replace(
                             "casos_limpios.csv", "casos_limpios_respaldo.csv")
                         ruta_respaldo_mun = RUTAS["procesado_mun"].replace(
                             "municipios_riesgo.csv", "municipios_riesgo_respaldo.csv")
                         if os.path.exists(ruta_procesado) and not os.path.exists(ruta_respaldo_casos):
-                            # Solo se crea la PRIMERA vez, para conservar
-                            # siempre la versión más antigua conocida como
-                            # punto de restauración (no se sobrescribe en
-                            # actualizaciones sucesivas).
                             pd.read_csv(ruta_procesado).to_csv(
                                 ruta_respaldo_casos, index=False, encoding="utf-8-sig")
                         if os.path.exists(RUTAS["procesado_mun"]) and not os.path.exists(ruta_respaldo_mun):
@@ -1256,8 +1241,7 @@ with tab6:
                         n_duplicados = n_antes_dedup - len(df_combinado)
                         n_agregados_reales = len(df_combinado) - antes_existente
 
-                        # Guardar la nueva base cruda acumulada para la
-                        # próxima actualización.
+                        # Guardar la nueva base cruda acumulada
                         os.makedirs(os.path.dirname(ruta_acumulado), exist_ok=True)
                         df_combinado.to_csv(ruta_acumulado, index=False,
                                               encoding="utf-8-sig")
@@ -1288,12 +1272,39 @@ with tab6:
         st.info("Aún no se ha seleccionado ningún archivo. Sube un archivo .xlsx "
                  "para comenzar el proceso de actualización.")
 
+    # ---- Regenerar artefactos de modelos ----
+    st.divider()
+    st.subheader("🔄 Regenerar modelos de IA")
+    st.caption("Si los gráficos de los modelos no aparecen correctamente o cambiaste "
+               "el código de los modelos (ej. etiquetas de clusters), puedes forzar "
+               "su regeneración sin subir nuevos datos.")
+
+    if st.button("🔄 Regenerar todos los artefactos de modelos", type="secondary"):
+        with st.spinner("Borrando artefactos y reentrenando modelos..."):
+            artefactos_modelo = [
+                os.path.join(RUTAS["graficas"], "15_arbol_visual.png"),
+                os.path.join(RUTAS["graficas"], "15_arbol_visual_ERROR.txt"),
+                os.path.join(RUTAS["graficas"], "13_confusion_dt.png"),
+                os.path.join(RUTAS["graficas"], "12_confusion_rf.png"),
+                os.path.join(RUTAS["graficas"], "11_feature_importance.png"),
+                os.path.join(RUTAS["graficas"], "14_kmeans_codo.png"),
+                os.path.join(RUTAS["reportes"], "municipios_clusters.csv"),
+                os.path.join(RUTAS["reportes"], "metricas_dt.csv"),
+                os.path.join(RUTAS["reportes"], "reglas_arbol_texto.txt"),
+            ]
+            for ruta in artefactos_modelo:
+                if os.path.exists(ruta):
+                    os.remove(ruta)
+            
+            # Limpiar caché y reentrenar
+            st.cache_data.clear()
+            from src.modelo import pipeline_modelos
+            pipeline_modelos(mun, verbose=False)
+            
+        st.success("✅ Modelos regenerados. Recarga la página para ver los resultados actualizados.")
+        st.balloons()
+
     # ---- Restaurar a la versión anterior ----
-    # Antes de la PRIMERA actualización realizada en esta instalación, el
-    # sistema guarda automáticamente una copia de seguridad de los datos
-    # tal como estaban. Este botón permite volver a esa versión, por
-    # ejemplo después de probar con un archivo de prueba o si una carga
-    # salió mal.
     st.divider()
     st.subheader("↩️ Restaurar datos a la versión original")
     ruta_resp_casos = RUTAS["procesado_casos"].replace(
