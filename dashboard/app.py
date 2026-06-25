@@ -53,25 +53,26 @@ st.markdown(f"""
 
 
 # ── Carga de datos ─────────────────────────────────────────────────────────
+# Asegurar que las carpetas de salida existen ANTES de cualquier operación
+os.makedirs(RUTAS["graficas"], exist_ok=True)
+os.makedirs(RUTAS["reportes"], exist_ok=True)
+
+
+# ── Carga de datos ─────────────────────────────────────────────────────────
 @st.cache_data(show_spinner="Cargando datos y preparando modelos (puede tardar un momento la primera vez)...")
 def cargar():
-    
-    print(">>> cargar() ejecutándose de cero — intento 2")  # ← agrega esta línea
-    if not os.path.exists(RUTAS["procesado_casos"]):
-        ...
     # BORRAR ARTEFACTOS VIEJOS DEL ÁRBOL (quitar después de 1 carga exitosa)
     artefactos_viejos = [
         os.path.join(RUTAS["graficas"], "15_arbol_visual.png"),
         os.path.join(RUTAS["graficas"], "15_arbol_visual_ERROR.txt"),
         os.path.join(RUTAS["reportes"], "reglas_arbol_texto.txt"),
-        os.path.join(RUTAS["reportes"], "metricas_dt.csv"),
     ]
     for ruta in artefactos_viejos:
         if os.path.exists(ruta):
             os.remove(ruta)
-            print(f"🗑️ Borrado: {os.path.basename(ruta)}")
     # FIN BLOQUE TEMPORAL
 
+    # Cargar o generar datos limpios
     if not os.path.exists(RUTAS["procesado_casos"]):
         from src.limpieza import limpiar_datos, guardar_procesado
         df = limpiar_datos(verbose=False)
@@ -83,6 +84,7 @@ def cargar():
             parse_dates=["FEC_NOT", "INI_SIN", "FEC_CON"]
         )
 
+    # Cargar o generar tabla municipal con IPI
     if not os.path.exists(RUTAS["procesado_mun"]):
         from src.ipi import pipeline_ipi
         mun = pipeline_ipi(df, verbose=False)
@@ -92,50 +94,50 @@ def cargar():
             dtype={"cod_dane_mun": str}
         )
 
-    # Generar artefactos del modelo automáticamente
-    ruta_clusters = os.path.join(
-        RUTAS["reportes"],
-        "municipios_clusters.csv"
-    )
+    # Verificar artefactos del modelo
+    ruta_clusters = os.path.join(RUTAS["reportes"], "municipios_clusters.csv")
+    ruta_fi = os.path.join(RUTAS["graficas"], "11_feature_importance.png")
+    ruta_arbol = os.path.join(RUTAS["graficas"], "15_arbol_visual.png")
 
-    ruta_fi = os.path.join(
-        RUTAS["graficas"],
-        "11_feature_importance.png"
-    )
+    # DEBUG
+    st.write("**🔧 Estado de artefactos:**")
+    st.write(f"  Clusters: {os.path.exists(ruta_clusters)}")
+    st.write(f"  Feature Importance: {os.path.exists(ruta_fi)}")
+    st.write(f"  Árbol visual: {os.path.exists(ruta_arbol)}")
 
-    ruta_arbol = os.path.join(
-        RUTAS["graficas"],
-        "15_arbol_visual.png"
-    )
+    faltantes = []
+    if not os.path.exists(ruta_clusters):
+        faltantes.append("clusters")
+    if not os.path.exists(ruta_fi):
+        faltantes.append("feature_importance")
+    if not os.path.exists(ruta_arbol):
+        faltantes.append("arbol_visual")
 
-    if not (
-        os.path.exists(ruta_clusters)
-        and os.path.exists(ruta_fi)
-        and os.path.exists(ruta_arbol)
-    ):
-        st.write("⏳ Ejecutando pipeline_modelos()...")  # DEBUG
+    if faltantes:
+        st.write(f"⏳ Faltan: {', '.join(faltantes)}. Ejecutando pipeline_modelos()...")
         from src.modelo import pipeline_modelos
-        resultado = pipeline_modelos(mun, verbose=False)
-        st.write(f"✅ pipeline_modelos() terminó. Retorno: {type(resultado)}")  # DEBUG
+        pipeline_modelos(mun, verbose=False)
+        st.write("✅ pipeline_modelos() terminó.")
         
-        # Verificar si se generó el árbol
-        st.write(f"¿Existe 15_arbol_visual.png?: {os.path.exists(ruta_arbol)}")  # DEBUG
+        # Verificar qué se generó
+        st.write("**🔧 Verificación post-ejecución:**")
+        st.write(f"  Árbol visual ahora: {os.path.exists(ruta_arbol)}")
         if os.path.exists(ruta_arbol):
-            st.write(f"Tamaño: {os.path.getsize(ruta_arbol)} bytes")  # DEBUG
+            st.write(f"  Tamaño: {os.path.getsize(ruta_arbol)} bytes")
         else:
-            # Buscar si hay archivo de error
             ruta_err = os.path.join(RUTAS["graficas"], "15_arbol_visual_ERROR.txt")
-            st.write(f"¿Existe archivo de error?: {os.path.exists(ruta_err)}")  # DEBUG
+            st.write(f"  Archivo de error: {os.path.exists(ruta_err)}")
             if os.path.exists(ruta_err):
                 with open(ruta_err, 'r') as f:
-                    st.error(f"Error en generación del árbol:\n{f.read()}")
+                    st.error(f"Error:\n{f.read()}")
     else:
-        st.write("✅ Todos los artefactos ya existen, no se ejecuta pipeline_modelos()")  # DEBUG
+        st.write("✅ Todos los artefactos existen.")
 
     return df, mun
 
-df, mun = cargar()
 
+# ←←← ESTA LÍNEA ES OBLIGATORIA, NO LA QUITES
+df, mun = cargar()
 
 # ── Autenticación por contraseña ─────────────────────────────────────────────
 def verificar_password():
