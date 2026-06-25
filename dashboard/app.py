@@ -844,83 +844,68 @@ with tab4:
 
         st.markdown("""
         **Parámetros:** `max_depth=5`, `class_weight='balanced'`, `criterion='gini'`
+
         Genera reglas legibles directamente interpretables por equipos de salud pública.
         """)
 
-        # ====== DIAGNÓSTICO ======
-        img_arbol = os.path.join(RUTAS["graficas"], "15_arbol_visual.png")
-        ruta_error_arbol = os.path.join(RUTAS["graficas"], "15_arbol_visual_ERROR.txt")
-        ruta_reglas = os.path.join(RUTAS["reportes"], "reglas_arbol_texto.txt")
+        # Generar el árbol en vivo directamente en el dashboard
+        # Usar los datos municipales ya cargados (mun)
+        from sklearn.tree import DecisionTreeClassifier, plot_tree, export_text
+        import matplotlib.pyplot as plt
         
-        # Mostrar rutas exactas para debug
-        with st.expander("🔧 Diagnóstico de rutas (desplegar para ver)"):
-            st.code(f"""
-Ruta buscada PNG:    {img_arbol}
-Existe PNG?:         {os.path.exists(img_arbol)}
-Ruta error:          {ruta_error_arbol}
-Existe error?:       {os.path.exists(ruta_error_arbol)}
-Ruta reglas:         {ruta_reglas}
-Existe reglas?:      {os.path.exists(ruta_reglas)}
-Tamaño PNG (bytes):  {os.path.getsize(img_arbol) if os.path.exists(img_arbol) else 'N/A'}
-            """)
+        # Preparar datos igual que en modelo.py
+        FEATURES_ARBOL = [
+            "tasa_x100k", "pct_adolescentes", "tendencia_H2_H1",
+            "pct_hospit", "pct_psiquia", "total_casos",
+            "pct_menores", "pct_mujeres", "pct_rural"
+        ]
+        
+        # Filtrar municipios con >=5 casos
+        mun_modelo = mun[mun["total_casos"] >= 5].copy()
+        
+        if len(mun_modelo) > 0:
+            X = mun_modelo[FEATURES_ARBOL].fillna(0)
+            y = mun_modelo["nivel_prioridad"]
             
-            # Listar TODO lo que hay en la carpeta graficas
-            st.write("**Archivos en carpeta gráficas:**")
-            graficas_dir = RUTAS["graficas"]
-            if os.path.exists(graficas_dir):
-                archivos = os.listdir(graficas_dir)
-                st.write(archivos if archivos else "(carpeta vacía)")
-            else:
-                st.error(f"¡La carpeta no existe!: {graficas_dir}")
-                
-            # Listar TODO lo que hay en reportes
-            st.write("**Archivos en carpeta reportes:**")
-            reportes_dir = RUTAS["reportes"]
-            if os.path.exists(reportes_dir):
-                archivos = os.listdir(reportes_dir)
-                st.write(archivos if archivos else "(carpeta vacía)")
-            else:
-                st.error(f"¡La carpeta no existe!: {reportes_dir}")
-        # ====== FIN DIAGNÓSTICO ======
-
-        # Mostrar diagrama si existe
-        if os.path.exists(img_arbol):
-            st.image(img_arbol, caption="Diagrama completo del árbol entrenado",
-                     use_container_width=True)
-            with open(img_arbol, "rb") as f:
-                st.download_button(
-                    label="⬇️ Descargar diagrama (PNG)",
-                    data=f,
-                    file_name="arbol_decision_prisma.png",
-                    mime="image/png"
-                )
+            # Entrenar árbol simple
+            modelo_dt = DecisionTreeClassifier(
+                max_depth=5,
+                class_weight="balanced",
+                random_state=42,
+                criterion="gini"
+            )
+            modelo_dt.fit(X, y)
+            
+            # Mostrar diagrama en vivo
+            fig, ax = plt.subplots(figsize=(18, 10))
+            plot_tree(
+                modelo_dt,
+                feature_names=FEATURES_ARBOL,
+                class_names=list(modelo_dt.classes_),
+                filled=True,
+                rounded=True,
+                proportion=True,
+                impurity=False,
+                fontsize=8,
+                ax=ax
+            )
+            ax.set_title(f"Árbol de Decisión — {modelo_dt.get_n_leaves()} hojas, profundidad {modelo_dt.get_depth()}")
+            st.pyplot(fig)
+            
+            # Mostrar reglas de texto como complemento
+            with st.expander("📋 Ver reglas del árbol (texto)"):
+                reglas = export_text(modelo_dt, feature_names=FEATURES_ARBOL, max_depth=3)
+                st.code(reglas)
         else:
-            if os.path.exists(ruta_error_arbol):
-                with st.expander("⚠️ Error al generar diagrama — ver detalles"):
-                    with open(ruta_error_arbol, encoding="utf-8") as f:
-                        st.code(f.read())
-            
-            if os.path.exists(ruta_reglas):
-                with st.expander("📋 Ver reglas del árbol (texto)", expanded=True):
-                    with open(ruta_reglas, encoding="utf-8") as f:
-                        st.text(f.read())
-            else:
-                st.info("El diagrama del árbol se está preparando. Vuelve a cargar la página en unos segundos.")
+            st.warning("No hay suficientes datos municipales para generar el árbol.")
 
-        # Métricas del árbol
-        ruta_metricas_dt = os.path.join(RUTAS["reportes"], "metricas_dt.csv")
-        if os.path.exists(ruta_metricas_dt):
-            with st.expander("📊 Ver métricas detalladas del Árbol de Decisión"):
-                metricas_dt = pd.read_csv(ruta_metricas_dt)
-                st.dataframe(metricas_dt, use_container_width=True, hide_index=True)
-
-        # Matriz de confusión
+        # Matriz de confusión (usar la imagen generada por modelo.py si existe)
         img_conf = os.path.join(RUTAS["graficas"], "13_confusion_dt.png")
         if os.path.exists(img_conf):
             st.image(img_conf, caption="Matriz de confusión – Árbol de Decisión",
                      use_container_width=True)
         else:
-            st.info("La matriz de confusión se está preparando.")
+            st.info("Matriz de confusión en preparación.")
     with sub2:
         st.subheader("Random Forest")
 
