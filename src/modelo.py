@@ -54,6 +54,7 @@ from src.utils import RUTAS, PALETA, COLORES_PRIORIDAD
 FEATURES = [
     "tasa_x100k",
     "pct_adolescentes",
+    "pct_jovenes_adultos",
     "tendencia_H2_H1",
     "pct_hospit",
     "pct_psiquia",
@@ -285,15 +286,18 @@ def grafica_feature_importance(modelo: RandomForestClassifier) -> plt.Figure:
     fi = pd.Series(modelo.feature_importances_, index=FEATURES).sort_values()
 
     etiquetas = {
-        "tasa_x100k":       "Tasa por 100k hab.",
-        "pct_adolescentes": "% Adolescentes (12–17)",
-        "tendencia_H2_H1":  "Tendencia H2 vs H1",
-        "pct_hospit":       "% Hospitalizados",
-        "pct_psiquia":      "% Antec. psiquiátrico",
-        "total_casos":      "Total de casos",
-        "pct_menores":      "% Menores de 18",
-        "pct_mujeres":      "% Femenino",
-        "pct_rural":        "% Rural",
+      
+    "tasa_x100k":          "Tasa por 100k hab.",
+    "pct_adolescentes":    "% Adolescentes (12–17)",    
+    "pct_jovenes_adultos": "% Jóvenes Adultos (18–25)",  
+    "tendencia_H2_H1":     "Tendencia H2 vs H1",
+    "pct_hospit":          "% Hospitalizados",
+    "pct_psiquia":         "% Antec. psiquiátrico",
+    "total_casos":         "Total de casos",
+    "pct_menores":         "% Menores de 18",
+    "pct_mujeres":         "% Femenino",
+    "pct_rural":           "% Rural",
+
     }
     fi.index = [etiquetas.get(i, i) for i in fi.index]
 
