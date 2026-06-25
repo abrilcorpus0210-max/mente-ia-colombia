@@ -137,26 +137,42 @@ def entrenar_arbol(X_train, X_test, y_train, y_test,
     return modelo
 
 
-def grafica_arbol_decision(modelo):
+def grafica_arbol_decision(modelo: DecisionTreeClassifier) -> plt.Figure:
+    """
+    Diagrama visual completo del árbol de decisión entrenado (plot_tree).
 
-    print(">>> INICIO grafica_arbol_decision")
+    Complementa las reglas en texto (export_text, ya impresas en consola)
+    con una versión gráfica pensada para insertarse en el dashboard
+    (Tab 4 → Árbol de Decisión), donde hasta ahora solo se mostraba la
+    matriz de confusión sin ningún diagrama del árbol en sí.
+
+    Notas de implementación:
+    - El ancho de la figura se ajusta según el número de hojas reales
+      (hasta 32 posibles con max_depth=5) para que las reglas no queden
+      amontonadas ni ilegibles, sin importar cuántas hojas resulten del
+      entrenamiento real.
+    - `class_names` se construye desde `modelo.classes_` (orden alfabético
+      real que usa sklearn internamente: Alta, Baja, Crítica, Media) y NO
+      desde `ORDEN_CLASES` (orden de severidad). plot_tree() asigna las
+      etiquetas de clase por posición, no por nombre: pasar ORDEN_CLASES
+      aquí etiquetaría los nodos con la clase incorrecta de forma
+      silenciosa (ej. un nodo "Alta" real aparecería rotulado "Baja").
+    - `proportion=True` muestra porcentaje de muestras por nodo en vez de
+      conteos absolutos, e `impurity=False` oculta el gini interno: ambos
+      pensados para una audiencia de salud pública, no técnica.
+    """
+    import traceback
+    ruta_error = os.path.join(RUTAS["graficas"], "15_arbol_visual_ERROR.txt")
 
     try:
-
         n_hojas = modelo.get_n_leaves()
-
-        print(f">>> hojas: {n_hojas}")
-
-        ancho = max(16, min(40, n_hojas * 1.8))
+        ancho   = max(16, min(40, n_hojas * 1.8))
 
         fig, ax = plt.subplots(figsize=(ancho, 10))
-
-        print(">>> antes de plot_tree")
-
         plot_tree(
             modelo,
             feature_names=FEATURES,
-            class_names=list(modelo.classes_),
+            class_names=list(modelo.classes_),  # orden real de sklearn, no ORDEN_CLASES
             filled=True,
             rounded=True,
             proportion=True,
@@ -164,28 +180,38 @@ def grafica_arbol_decision(modelo):
             fontsize=9,
             ax=ax
         )
-
-        print(">>> despues de plot_tree")
-
-        ruta = os.path.join(
-            RUTAS["graficas"],
-            "15_arbol_visual.png"
+        ax.set_title(
+            f"Árbol de Decisión completo — profundidad {modelo.get_depth()}, "
+            f"{n_hojas} hojas\nClasificación de nivel de prioridad municipal",
+            fontsize=13
         )
-
+        fig.tight_layout()
+        ruta = os.path.join(RUTAS["graficas"], "15_arbol_visual.png")
         os.makedirs(os.path.dirname(ruta), exist_ok=True)
+        fig.savefig(ruta, dpi=150, bbox_inches="tight", facecolor=PALETA.get("fondo", "white"))
+        plt.close(fig)
 
-        print(">>> antes de savefig")
+        # Si una corrida anterior falló y dejó un archivo de error, y esta
+        # corrida sí funcionó, limpiarlo para no mostrar un error viejo.
+        if os.path.exists(ruta_error):
+            os.remove(ruta_error)
 
-        fig.savefig(
-            ruta,
-            dpi=150,
-            bbox_inches="tight"
-        )
-
-        print(">>> despues de savefig")
+        print(f"  ✓ Gráfica guardada: {ruta}")
+        return fig
 
     except Exception as e:
+        # No tragarse el error en silencio: se escribe en un .txt junto a
+        # las gráficas para poder verlo directamente desde el dashboard
+        # (Tab 4 lo muestra con st.error si este archivo existe), sin
+        # depender de acceso a los logs del servidor de Streamlit Cloud.
+        os.makedirs(os.path.dirname(ruta_error), exist_ok=True)
+        with open(ruta_error, "w", encoding="utf-8") as f:
+            f.write(f"{type(e).__name__}: {e}\n\n")
+            f.write(traceback.format_exc())
         print("ERROR ARBOL:", e)
+        return None
+
+
 # -----------------------------------------------------------------------------
 # B. RANDOM FOREST
 # -----------------------------------------------------------------------------
