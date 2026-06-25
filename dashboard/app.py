@@ -817,7 +817,7 @@ with tab4:
 
     sub1, sub2, sub3 = st.tabs(["Árbol de Decisión", "Random Forest", "K-Means"])
 
-        with sub1:
+    with sub1:
         st.subheader("Árbol de Decisión")
 
         st.markdown("""
