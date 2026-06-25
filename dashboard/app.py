@@ -104,7 +104,7 @@ def cargar():
         "15_arbol_visual.png"
     )
 
-        if not (
+    if not (
         os.path.exists(ruta_clusters)
         and os.path.exists(ruta_fi)
         and os.path.exists(ruta_arbol)
