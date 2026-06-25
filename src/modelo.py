@@ -235,14 +235,18 @@ def entrenar_random_forest(X_train, X_test, y_train, y_test,
     )
     modelo.fit(X_train, y_train)
 
+    # DEBUG: ver importancias reales antes de cualquier otra cosa
+    fi_debug = pd.Series(modelo.feature_importances_, index=FEATURES)
+    print("\n=== IMPORTANCIAS REALES (DEBUG) ===")
+    for feat, imp in fi_debug.sort_values(ascending=False).items():
+        barra = "█" * int(imp * 40)
+        print(f"  {feat:<25s}: {imp:.4f}  {barra}")
+    print(f"=== pct_jovenes_adultos = {fi_debug.get('pct_jovenes_adultos', 'NO ENCONTRADO'):.4f} ===\n")
+
     y_pred = modelo.predict(X_test)
     acc    = accuracy_score(y_test, y_pred)
 
     # Validación cruzada (5 folds) para una estimación más robusta.
-    # Se ajusta el número de folds según el tamaño de la clase más
-    # pequeña en train, para evitar errores cuando hay pocos municipios
-    # o niveles de prioridad con muy pocos casos (ej. tras combinar
-    # datos nuevos con un perfil de riesgo poco común).
     n_clase_min_train = y_train.value_counts().min() if len(y_train) > 0 else 0
     cv_folds = min(5, n_clase_min_train) if n_clase_min_train >= 2 else 0
 
@@ -250,8 +254,6 @@ def entrenar_random_forest(X_train, X_test, y_train, y_test,
         cv_scores = cross_val_score(modelo, X_train, y_train, cv=cv_folds,
                                      scoring="accuracy")
     else:
-        # Conjunto demasiado pequeño o desbalanceado para validación
-        # cruzada confiable; se omite y se reporta solo el accuracy de test.
         cv_scores = None
 
     if verbose:
@@ -270,7 +272,7 @@ def entrenar_random_forest(X_train, X_test, y_train, y_test,
             labels=ORDEN_CLASES,
             zero_division=0
         ))
-        # Feature importance
+        # Feature importance (igual que antes, para no romper el formato)
         fi = pd.Series(modelo.feature_importances_, index=FEATURES)
         fi = fi.sort_values(ascending=False)
         print("  Feature Importance (Gini):")
