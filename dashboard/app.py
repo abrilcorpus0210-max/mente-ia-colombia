@@ -55,6 +55,10 @@ st.markdown(f"""
 # ── Carga de datos ─────────────────────────────────────────────────────────
 @st.cache_data(show_spinner="Cargando datos y preparando modelos (puede tardar un momento la primera vez)...")
 def cargar():
+    
+    print(">>> cargar() ejecutándose de cero — intento 2")  # ← agrega esta línea
+    if not os.path.exists(RUTAS["procesado_casos"]):
+        ...
     # BORRAR ARTEFACTOS VIEJOS DEL ÁRBOL (quitar después de 1 carga exitosa)
     artefactos_viejos = [
         os.path.join(RUTAS["graficas"], "15_arbol_visual.png"),
