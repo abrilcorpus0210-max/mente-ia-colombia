@@ -539,7 +539,11 @@ def pipeline_modelos(mun: pd.DataFrame = None, verbose: bool = True) -> dict:
 
     # A. Árbol de Decisión
     modelo_dt = entrenar_arbol(X_train, X_test, y_train, y_test, verbose)
-    grafica_arbol_decision(modelo_dt)
+    
+    print(">>> Llamando grafica_arbol_decision()...")
+    fig_arbol = grafica_arbol_decision(modelo_dt)
+    print(f">>> grafica_arbol_decision() retornó: {fig_arbol is not None}")
+    
     grafica_matriz_confusion(modelo_dt, X_test, y_test, "Árbol de Decisión")
 
     # Guardar métricas del DT como CSV para el dashboard
