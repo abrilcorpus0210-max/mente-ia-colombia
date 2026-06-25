@@ -140,74 +140,81 @@ def entrenar_arbol(X_train, X_test, y_train, y_test,
 def grafica_arbol_decision(modelo: DecisionTreeClassifier) -> plt.Figure:
     """
     Diagrama visual completo del árbol de decisión entrenado (plot_tree).
-
-    Complementa las reglas en texto (export_text, ya impresas en consola)
-    con una versión gráfica pensada para insertarse en el dashboard
-    (Tab 4 → Árbol de Decisión), donde hasta ahora solo se mostraba la
-    matriz de confusión sin ningún diagrama del árbol en sí.
-
-    Notas de implementación:
-    - El ancho de la figura se ajusta según el número de hojas reales
-      (hasta 32 posibles con max_depth=5) para que las reglas no queden
-      amontonadas ni ilegibles, sin importar cuántas hojas resulten del
-      entrenamiento real.
-    - `class_names` se construye desde `modelo.classes_` (orden alfabético
-      real que usa sklearn internamente: Alta, Baja, Crítica, Media) y NO
-      desde `ORDEN_CLASES` (orden de severidad). plot_tree() asigna las
-      etiquetas de clase por posición, no por nombre: pasar ORDEN_CLASES
-      aquí etiquetaría los nodos con la clase incorrecta de forma
-      silenciosa (ej. un nodo "Alta" real aparecería rotulado "Baja").
-    - `proportion=True` muestra porcentaje de muestras por nodo en vez de
-      conteos absolutos, e `impurity=False` oculta el gini interno: ambos
-      pensados para una audiencia de salud pública, no técnica.
+    
+    Versión corregida: maneja entornos headless, limita tamaño excesivo,
+    y tiene fallback a reglas de texto si el renderizado gráfico falla.
     """
     import traceback
     ruta_error = os.path.join(RUTAS["graficas"], "15_arbol_visual_ERROR.txt")
+    ruta_fallback = os.path.join(RUTAS["reportes"], "reglas_arbol_texto.txt")
 
     try:
+        # Forzar backend no-interactivo (seguro para Streamlit Cloud)
+        import matplotlib
+        matplotlib.use("Agg", force=True)
+        
         n_hojas = modelo.get_n_leaves()
-        ancho   = max(16, min(40, n_hojas * 1.8))
-
-        fig, ax = plt.subplots(figsize=(ancho, 10))
+        profundidad = modelo.get_depth()
+        
+        # Calcular dimensiones: más conservadoras para evitar problemas de memoria
+        # Máximo 28" de ancho, mínimo 12", escala según hojas reales
+        ancho = max(12, min(28, n_hojas * 1.2 + 4))
+        alto = max(8, min(14, profundidad * 1.8 + 2))
+        
+        fig, ax = plt.subplots(figsize=(ancho, alto))
+        
         plot_tree(
             modelo,
             feature_names=FEATURES,
-            class_names=list(modelo.classes_),  # orden real de sklearn, no ORDEN_CLASES
+            class_names=list(modelo.classes_),  # orden real de sklearn
             filled=True,
             rounded=True,
             proportion=True,
             impurity=False,
-            fontsize=9,
+            fontsize=max(7, min(10, 200 // max(n_hojas, 1))),  # auto-ajuste
             ax=ax
         )
         ax.set_title(
-            f"Árbol de Decisión completo — profundidad {modelo.get_depth()}, "
-            f"{n_hojas} hojas\nClasificación de nivel de prioridad municipal",
-            fontsize=13
+            f"Árbol de Decisión — profundidad {profundidad}, {n_hojas} hojas\n"
+            f"Clasificación de nivel de prioridad municipal",
+            fontsize=12
         )
         fig.tight_layout()
+        
         ruta = os.path.join(RUTAS["graficas"], "15_arbol_visual.png")
         os.makedirs(os.path.dirname(ruta), exist_ok=True)
-        fig.savefig(ruta, dpi=150, bbox_inches="tight", facecolor=PALETA.get("fondo", "white"))
+        fig.savefig(ruta, dpi=120, bbox_inches="tight", 
+                    facecolor=PALETA.get("fondo", "white"))
         plt.close(fig)
 
-        # Si una corrida anterior falló y dejó un archivo de error, y esta
-        # corrida sí funcionó, limpiarlo para no mostrar un error viejo.
+        # Limpiar archivo de error anterior si existía
         if os.path.exists(ruta_error):
             os.remove(ruta_error)
 
-        print(f"  ✓ Gráfica guardada: {ruta}")
+        print(f"  ✓ Gráfica guardada: {ruta} ({ancho:.1f}\" × {alto:.1f}\", {n_hojas} hojas)")
         return fig
 
     except Exception as e:
-        # No tragarse el error en silencio: se escribe en un .txt junto a
-        # las gráficas para poder verlo directamente desde el dashboard
-        # (Tab 4 lo muestra con st.error si este archivo existe), sin
-        # depender de acceso a los logs del servidor de Streamlit Cloud.
+        # Escribir error para debug
         os.makedirs(os.path.dirname(ruta_error), exist_ok=True)
         with open(ruta_error, "w", encoding="utf-8") as f:
             f.write(f"{type(e).__name__}: {e}\n\n")
             f.write(traceback.format_exc())
+        
+        # FALLBACK: generar reglas de texto como alternativa
+        try:
+            os.makedirs(os.path.dirname(ruta_fallback), exist_ok=True)
+            with open(ruta_fallback, "w", encoding="utf-8") as f:
+                f.write("REGLAS DEL ÁRBOL DE DECISIÓN\n")
+                f.write("=" * 60 + "\n\n")
+                f.write(f"Profundidad: {modelo.get_depth()} | Hojas: {modelo.get_n_leaves()}\n")
+                f.write(f"Clases: {', '.join(modelo.classes_)}\n\n")
+                f.write(export_text(modelo, feature_names=FEATURES, max_depth=5))
+            print(f"  ⚠ plot_tree falló, pero se generaron reglas de texto en: {ruta_fallback}")
+        except Exception as e2:
+            with open(ruta_error, "a", encoding="utf-8") as f:
+                f.write(f"\n\nFALLBACK TAMBIÉN FALLÓ: {e2}\n")
+        
         print("ERROR ARBOL:", e)
         return None
 
