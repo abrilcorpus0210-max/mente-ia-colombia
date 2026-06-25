@@ -943,13 +943,35 @@ with tab4:
     with sub3:
         st.subheader("K-Means – Perfiles Territoriales")
         st.markdown("K-Means agrupa municipios en **4 clusters** por perfil epidemiológico.")
+        
+        # NOTA EXPLICATIVA SOBRE EL DILUCIÓN DEL PROMEDIO
+        st.info("""
+        📌 **Nota metodológica:** Los clusters se etiquetan por **tasa relativa 
+        (por 100k habitantes)**, no por volumen absoluto de casos. Esto explica 
+        por qué Bogotá (Cluster C, ~6,000 casos) aparece en un nivel diferente 
+        a ciudades medianas (Cluster D, ~290 casos promedio): la tasa de Bogotá 
+        está "diluida" por su población de 8.4 millones, mientras que ciudades 
+        más pequeñas tienen tasas proporcionalmente más altas. Para salud pública, 
+        la **tasa relativa** es el indicador correcto de carga de enfermedad.
+        """)
+        
         ruta_km = os.path.join(RUTAS["reportes"], "municipios_clusters.csv")
         if os.path.exists(ruta_km):
-            mun_km = pd.read_csv(ruta_km, dtype={"cod_dane_mun":str})
+            mun_km = pd.read_csv(ruta_km, dtype={"cod_dane_mun": str})
+            
+            # MAPEO DE ETIQUETAS NUEVAS
+            etiquetas_nuevas = {
+                "Cluster A – Carga Baja": "Cluster A – Perfil Rural/Bajo",
+                "Cluster B – Carga Media": "Cluster B – Perfil Urbano Medio",
+                "Cluster C – Carga Alta": "Cluster C – Metrópoli Única (Bogotá)",
+                "Cluster D – Carga Crítica": "Cluster D – Ciudades Grandes/Medianas",
+            }
             if "perfil_cluster" in mun_km.columns:
+                mun_km["perfil_cluster"] = mun_km["perfil_cluster"].replace(etiquetas_nuevas)
+                
                 conteo_km = (mun_km["perfil_cluster"].value_counts()
                              .reset_index()
-                             .rename(columns={"perfil_cluster":"Cluster","count":"Municipios"}))
+                             .rename(columns={"perfil_cluster": "Cluster", "count": "Municipios"}))
                 fig_km = go.Figure(go.Pie(
                     labels=conteo_km["Cluster"],
                     values=conteo_km["Municipios"],
@@ -958,17 +980,18 @@ with tab4:
                 ))
                 fig_km.update_layout(**LAYOUT_BASE)
                 st.plotly_chart(fig_km, use_container_width=True)
+                
                 perfil_km = (mun_km.groupby("perfil_cluster")[
-                    ["tasa_x100k","pct_adolescentes","tendencia_H2_H1","total_casos"]
+                    ["tasa_x100k", "pct_adolescentes", "tendencia_H2_H1", "total_casos"]
                 ].mean().round(3))
                 st.dataframe(perfil_km, use_container_width=True)
         else:
             st.info("Los resultados del modelo se están preparando. Vuelve a cargar la página en unos segundos.")
+        
         img_codo = os.path.join(RUTAS["graficas"], "14_kmeans_codo.png")
         if os.path.exists(img_codo):
             st.image(img_codo, caption="Método del codo – Selección de k",
-                     use_column_width=True)
-
+                     use_container_width=True)
 
 # ===========================================================================
 # TAB 5 – RECOMENDACIONES
