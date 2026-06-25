@@ -104,13 +104,29 @@ def cargar():
         "15_arbol_visual.png"
     )
 
-    if not (
+        if not (
         os.path.exists(ruta_clusters)
         and os.path.exists(ruta_fi)
         and os.path.exists(ruta_arbol)
     ):
+        st.write("⏳ Ejecutando pipeline_modelos()...")  # DEBUG
         from src.modelo import pipeline_modelos
-        pipeline_modelos(mun, verbose=False)
+        resultado = pipeline_modelos(mun, verbose=False)
+        st.write(f"✅ pipeline_modelos() terminó. Retorno: {type(resultado)}")  # DEBUG
+        
+        # Verificar si se generó el árbol
+        st.write(f"¿Existe 15_arbol_visual.png?: {os.path.exists(ruta_arbol)}")  # DEBUG
+        if os.path.exists(ruta_arbol):
+            st.write(f"Tamaño: {os.path.getsize(ruta_arbol)} bytes")  # DEBUG
+        else:
+            # Buscar si hay archivo de error
+            ruta_err = os.path.join(RUTAS["graficas"], "15_arbol_visual_ERROR.txt")
+            st.write(f"¿Existe archivo de error?: {os.path.exists(ruta_err)}")  # DEBUG
+            if os.path.exists(ruta_err):
+                with open(ruta_err, 'r') as f:
+                    st.error(f"Error en generación del árbol:\n{f.read()}")
+    else:
+        st.write("✅ Todos los artefactos ya existen, no se ejecuta pipeline_modelos()")  # DEBUG
 
     return df, mun
 
