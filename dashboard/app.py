@@ -999,27 +999,49 @@ with tab4:
 with tab5:
     st.header("💡 Recomendaciones Prescriptivas")
     st.markdown(
-        "Recomendaciones generadas automáticamente. Carácter **preventivo y poblacional**."
+        "Recomendaciones generadas automáticamente a partir del análisis de "
+        "**38,747 casos de intento de suicidio** registrados en SIVIGILA 2024. "
+        "Carácter **preventivo, poblacional y basado en evidencia**."
     )
     st.divider()
 
-    pct_ado_g   = round(df["es_adolescente"].mean()*100, 1)
-    pct_rural_g = round(df["es_rural"].mean()*100, 1)
-    n_crit      = len(mun[mun["nivel_prioridad"]=="Crítica"])
-    depto_top2  = df["Departamento_ocurrencia"].value_counts().idxmax()
+    # ── Hallazgos principales ──
+    pct_ado_g      = round(df["es_adolescente"].mean()*100, 1)
+    pct_joven_g    = round(df["EDAD"].between(18, 25).mean()*100, 1)
+    pct_rural_g    = round(df["es_rural"].mean()*100, 1)
+    n_crit         = len(mun[mun["nivel_prioridad"]=="Crítica"])
+    n_alta         = len(mun[mun["nivel_prioridad"]=="Alta"])
+    depto_top2     = df["Departamento_ocurrencia"].value_counts().idxmax()
+    mun_top_ipi    = mun.iloc[0]["Municipio_ocurrencia"] if len(mun) > 0 else "–"
 
     st.subheader("📌 Hallazgos principales")
     col_h1, col_h2 = st.columns(2)
     with col_h1:
-        st.info(f"**{pct_ado_g}%** de los casos son adolescentes (12–17 años). "
-                f"Foco prioritario: prevención escolar.")
-        st.info(f"**{pct_rural_g}%** de los casos ocurrió en zona rural, "
-                f"donde el acceso a salud mental es limitado.")
+        st.info(
+            f"**{pct_joven_g}%** de los casos corresponden a jóvenes adultos "
+            f"(18–25 años), el grupo de edad con mayor volumen absoluto. "
+            f"**{pct_ado_g}%** son adolescentes (12–17 años). "
+            f"Juntos concentran el **{round(pct_ado_g + pct_joven_g, 1)}%** "
+            f"de todos los casos. Foco prioritario: salud mental juvenil "
+            f"en entornos escolares, universitarios y laborales."
+        )
+        st.info(
+            f"**{pct_rural_g}%** de los casos ocurrió en zona rural, donde el "
+            f"acceso a servicios de salud mental es limitado y la notificación "
+            f"es más deficiente."
+        )
     with col_h2:
-        st.warning(f"**{n_crit} municipios** en nivel **Crítico** (IPI ≥ 80). "
-                   f"Requieren intervención inmediata.")
-        st.warning(f"**{depto_top2}** tiene el mayor número absoluto de casos. "
-                   f"El IPI complementa este dato con perspectiva relativa.")
+        st.warning(
+            f"**{n_crit} municipios** en nivel **Crítico** (IPI ≥ 80) y "
+            f"**{n_alta}** en nivel **Alta** (IPI ≥ 60). La distribución está "
+            f"altamente concentrada en niveles Bajo y Medio: el riesgo es "
+            f"geográficamente disperso, no concentrado en unos pocos hotspots."
+        )
+        st.warning(
+            f"**{depto_top2}** lidera en volumen absoluto de casos, pero el IPI "
+            f"identifica municipios de menor tamaño con carga relativa superior. "
+            f"El municipio con mayor IPI es **{mun_top_ipi}**."
+        )
 
     st.divider()
     st.subheader("🎯 Recomendación por municipio prioritario")
@@ -1032,7 +1054,8 @@ with tab5:
         st.markdown(f"**Departamento:** {datos_mun['Departamento_ocurrencia']}")
         st.markdown(f"**Total de casos:** {int(datos_mun['total_casos']):,}")
         st.markdown(f"**Tasa por 100k hab.:** {datos_mun['tasa_x100k']:.1f}")
-        st.markdown(f"**% Adolescentes:** {datos_mun['pct_adolescentes']*100:.1f}%")
+        st.markdown(f"**% Adolescentes (12-17):** {datos_mun['pct_adolescentes']*100:.1f}%")
+        st.markdown(f"**% Jóvenes Adultos (18-25):** {datos_mun['pct_jovenes_adultos']*100:.1f}%")
     with col_p2:
         st.markdown(f"**Tendencia H2/H1:** {datos_mun['tendencia_H2_H1']*100:.1f}%")
         st.markdown(f"**% Hospitalizados:** {datos_mun['pct_hospit']*100:.1f}%")
@@ -1047,21 +1070,25 @@ with tab5:
         if row["nivel_prioridad"] == "Crítica":
             recom.append("• **Intervención inmediata:** activar ruta de atención integral "
                          "en salud mental y articular con Secretaría Departamental de Salud.")
-        if row["pct_adolescentes"] > 0.30:
-            recom.append("• **Prevención escolar:** programas de salud mental en "
-                         "instituciones educativas, grupo 12–17 años.")
+        if row["nivel_prioridad"] == "Alta":
+            recom.append("• **Intervención prioritaria:** fortalecer servicios de salud mental "
+                         "de primer nivel y vinculación con red de especialistas.")
+        if row["pct_jovenes_adultos"] > 0.25 or row["pct_adolescentes"] > 0.25:
+            recom.append("• **Salud mental juvenil:** implementar programas de prevención "
+                         "en instituciones educativas (12-17) y universidades/centros laborales "
+                         "(18-25), incluyendo detección temprana y líneas de crisis.")
         if row["tendencia_H2_H1"] > 0.3:
-            recom.append("• **Vigilancia intensificada:** crecimiento sostenido en H2. "
-                         "Fortalecer notificación y análisis semanal.")
+            recom.append("• **Vigilancia intensificada:** crecimiento sostenido en segundo semestre. "
+                         "Fortalecer notificación semanal y análisis de brotes.")
         if row["pct_rural"] > 0.20:
-            recom.append("• **Acceso rural:** fortalecer puestos de salud y telemedicina "
-                         "en zonas rurales.")
+            recom.append("• **Acceso rural:** fortalecer puestos de salud, telemedicina "
+                         "y brigadas móviles de salud mental en zonas rurales dispersas.")
         if row["pct_hospit"] > 0.70:
             recom.append("• **Capacidad hospitalaria:** revisar protocolos de urgencias "
                          "y red de salud mental de segundo nivel.")
         if row["pct_psiquia"] > 0.05:
             recom.append("• **Seguimiento post-evento:** fortalecer mecanismos de "
-                         "acompañamiento tras el evento inicial.")
+                         "acompañamiento psicológico tras el evento inicial.")
         if not recom:
             recom.append("• Mantener vigilancia epidemiológica activa y fortalecer "
                          "programas de promoción de salud mental comunitaria.")
@@ -1074,22 +1101,33 @@ with tab5:
     st.divider()
     st.subheader("📋 Recomendaciones generales para Colombia")
     st.markdown("""
-    1. **Priorización territorial con enfoque adolescente:** los municipios con mayor
-       concentración en el grupo 12–17 deben recibir refuerzo en el entorno escolar.
-    2. **Monitoreo de municipios emergentes:** los que crecieron en H2 pueden escalar
-       a Crítico en 2025. Incluirlos en el tablero mensual de las Secretarías de Salud.
-    3. **Equidad territorial:** la tasa por 100k revela municipios pequeños con carga
-       relativa superior a las grandes ciudades.
-    4. **Fortalecimiento de la notificación:** mejorar capacidad de UPGD en municipios
-       de baja densidad para mayor cobertura del sistema.
-    5. **Articulación intersectorial:** salud, educación, protección y comunidad.
-       Activar mesas intersectoriales en municipios de prioridad Alta y Crítica.
+    1. **Salud mental juvenil como eje central:** los grupos 12–17 y 18–25 
+       concentran el mayor volumen de casos. Se requiere un enfoque integral 
+       que abarque entornos escolares, universitarios y laborales, con énfasis 
+       en detección temprana y reducción de estigma.
+
+    2. **Equidad territorial:** la tasa por 100k habitantes revela que 
+       municipios pequeños y rurales tienen carga relativa comparable o 
+       superior a las grandes ciudades. Fortalecer la capacidad de respuesta 
+       en zonas con acceso limitado.
+
+    3. **Monitoreo de municipios emergentes:** los que muestran crecimiento 
+       acelerado en el segundo semestre pueden escalar de Media a Alta prioridad. 
+       Incluirlos en tableros mensuales de las Secretarías de Salud.
+
+    4. **Fortalecimiento de la notificación:** mejorar la capacidad de las 
+       UPGD en municipios de baja densidad poblacional para reducir subregistro 
+       y mejorar la cobertura del sistema de vigilancia.
+
+    5. **Articulación intersectorial:** salud, educación, protección social, 
+       trabajo y comunidad. Activar mesas intersectoriales en municipios de 
+       prioridad Alta y Crítica, con énfasis en prevención primaria.
     """)
 
     if st.button("⬇️ Descargar ranking (agregado, ≥5 casos)"):
         ranking = mun[["ranking_nacional","Departamento_ocurrencia","Municipio_ocurrencia",
                         "total_casos","tasa_x100k","IPI","nivel_prioridad"]].copy()
-        ranking = suprimir_celdas(ranking, "total_casos")   # excluye < 5 casos
+        ranking = suprimir_celdas(ranking, "total_casos")
         ranking["tasa_x100k"] = ranking["tasa_x100k"].round(1)
         ranking["IPI"]        = ranking["IPI"].round(1)
         st.download_button(
@@ -1100,7 +1138,6 @@ with tab5:
         )
         st.caption(f"El archivo excluye municipios con menos de {UMBRAL_PRIVACIDAD} "
                    "casos por privacidad. No contiene registros individuales.")
-
 
 # ===========================================================================
 # TAB 6 – ACTUALIZAR DATOS
